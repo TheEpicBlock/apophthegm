@@ -1,4 +1,9 @@
+#![feature(ascii_char)]
+#![feature(ascii_char_variants)]
 #![feature(slice_as_chunks)]
+
+mod chess;
+
 use std::{mem::size_of, thread, time::Duration};
 
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends};
