@@ -31,7 +31,7 @@ fn main(
         if ((piece & 0x7u) == 6u) {
           // Pawn
           let offset = ((to_move >> 3u) * 2u) - 1u;
-          if (!isColour(&board, to_move, x, y+offset)) {
+          if (getPiece(&board, x, y+offset) == 0u) {
             var new_board = board;
             new_board.pieces[y] &= ~(0xFu << (x*4u));
             new_board.pieces[y+offset] &= ~(0xFu << (x*4u));
