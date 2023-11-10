@@ -36,7 +36,7 @@ async fn main() {
 
     device.start_capture();
 
-    let board = GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    let board = GameState::from_fen("rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2");
     println!("Start:\n{}", board.get_board());
 
     let in_buf = device.create_buffer(
@@ -49,7 +49,6 @@ async fn main() {
     );
     // board.write(&mut in_buf.slice(..).get_mapped_range_mut());
     in_buf.slice(0..32).get_mapped_range_mut().copy_from_slice(&convert::<GpuBoard>(&board.get_board()).to_bytes());
-    dbg!(&convert::<GpuBoard>(&board.get_board()).to_bytes());
     in_buf.unmap();
 
     let out_buf = device.create_buffer(
