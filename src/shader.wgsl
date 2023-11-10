@@ -37,22 +37,29 @@ fn main(
         if ((piece & 0x7u) == 6u) {
           // Pawn
           let offset = ((to_move >> 3u) * 2u) - 1u;
+          // Upward movement
           if (getPiece(&board, x, y+offset) == 0u) {
-            var new_board = board;
-            new_board.pieces[y] &= ~(0xFu << (x*4u));
-            new_board.pieces[y+offset] &= ~(0xFu << (x*4u));
-            new_board.pieces[y+offset] |= (piece << (x*4u));
+            var new_board = movePiece(&board, piece, x, y, x, y+offset);
             output[out] = new_board;
             out += 1u;
 
             if (y == pawn_start_rank && getPiece(&board, x, y+(offset*2u)) == 0u) {
-              var new_board2 = board;
-              new_board2.pieces[y] &= ~(0xFu << (x*4u));
-              new_board2.pieces[y+(offset*2u)] &= ~(0xFu << (x*4u));
-              new_board2.pieces[y+(offset*2u)] |= (piece << (x*4u));
+              var new_board2 = movePiece(&board, piece, x, y, x, y+(offset*2u));
               output[out] = new_board2;
               out += 1u;
             }
+          }
+          // Capture
+          if (x + 1u < 8u && isOpponent(&board, to_move, x + 1u, y+offset)) {
+            var new_board = movePiece(&board, piece, x, y, x + 1u, y+offset);
+            output[out] = new_board;
+            out += 1u;
+          }
+          // Yes, this check is still correct, because it's unsigned
+          if (x - 1u < 8u && isOpponent(&board, to_move, x - 1u, y+offset)) {
+            var new_board = movePiece(&board, piece, x, y, x - 1u, y+offset);
+            output[out] = new_board;
+            out += 1u;
           }
         }
       }
@@ -67,4 +74,17 @@ fn getPiece(board: ptr<function, Board>, x: u32, y: u32) -> u32 {
 fn isColour(board: ptr<function, Board>, colour: u32, x: u32, y: u32) -> bool {
   let p = getPiece(board, x, y);
   return p != 0u && ((p | 0x8u) == colour);
+}
+
+fn isOpponent(board: ptr<function, Board>, to_move: u32, x: u32, y: u32) -> bool {
+  let p = getPiece(board, x, y);
+  return p != 0u && ((p | 0x8u) != to_move);
+}
+
+fn movePiece(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32, yNew: u32) -> Board {
+  var new_board = *board;
+  new_board.pieces[y] &= ~(0xFu << (x*4u));
+  new_board.pieces[yNew] &= ~(0xFu << (xNew*4u));
+  new_board.pieces[yNew] |= (piece << (xNew*4u));
+  return new_board;
 }

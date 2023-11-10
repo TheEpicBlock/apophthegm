@@ -36,7 +36,7 @@ async fn main() {
 
     device.start_capture();
 
-    let board = GameState::from_fen("rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2");
+    let board = GameState::from_fen("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1");
     println!("Start:\n{}", board.get_board());
 
     let in_buf = device.create_buffer(
