@@ -22,6 +22,12 @@ fn main(
   var board = input[global_id.x];
   let to_move = 0x8u;
 
+  var pawn_start_rank = 6u; // 0-indexed!
+  if (to_move == 0x8u) {
+    pawn_start_rank = 1u; // 0-indexed!
+  }
+
+
   var out = 0u;
   for (var x = 0u; x < 8u; x++) {
     for (var y = 0u; y < 8u; y++) {
@@ -38,6 +44,15 @@ fn main(
             new_board.pieces[y+offset] |= (piece << (x*4u));
             output[out] = new_board;
             out += 1u;
+
+            if (y == pawn_start_rank && getPiece(&board, x, y+(offset*2u)) == 0u) {
+              var new_board2 = board;
+              new_board2.pieces[y] &= ~(0xFu << (x*4u));
+              new_board2.pieces[y+(offset*2u)] &= ~(0xFu << (x*4u));
+              new_board2.pieces[y+(offset*2u)] |= (piece << (x*4u));
+              output[out] = new_board2;
+              out += 1u;
+            }
           }
         }
       }
