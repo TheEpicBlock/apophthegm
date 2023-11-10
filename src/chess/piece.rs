@@ -38,8 +38,8 @@ impl Piece {
     pub fn to_char(&self) -> char {
         let piece_char = self.ty.to_char();
         return match self.side {
-            Side::Black => piece_char.to_ascii_uppercase(),
-            Side::White => piece_char.to_ascii_lowercase(),
+            Side::Black => piece_char.to_ascii_lowercase(),
+            Side::White => piece_char.to_ascii_uppercase(),
         };
     }
 }

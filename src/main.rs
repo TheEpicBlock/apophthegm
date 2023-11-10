@@ -13,7 +13,7 @@ use std::{mem::size_of, thread, time::Duration};
 
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends};
 
-use crate::chess::GameState;
+use crate::chess::{GameState, GpuBoard, board::convert};
 
 #[tokio::main]
 async fn main() {
@@ -47,7 +47,9 @@ async fn main() {
             mapped_at_creation: true
         }
     );
-    board.write(&mut in_buf.slice(..).get_mapped_range_mut());
+    // board.write(&mut in_buf.slice(..).get_mapped_range_mut());
+    in_buf.slice(0..32).get_mapped_range_mut().copy_from_slice(&convert::<GpuBoard>(&board.get_board()).to_bytes());
+    dbg!(&convert::<GpuBoard>(&board.get_board()).to_bytes());
     in_buf.unmap();
 
     let out_buf = device.create_buffer(
@@ -154,8 +156,13 @@ async fn main() {
         .expect("communication failed")
         .expect("buffer reading failed");
     let s = &staging_buf.slice(..).get_mapped_range();
-    s.as_chunks::<{size_of::<u64>()}>().0.iter().for_each(|b| {
-        println!("{}", u64::from_le_bytes(*b));
+    // s.as_chunks::<{size_of::<u32>()}>().0.iter().for_each(|b| {
+    //     let board = u32::from_le_bytes(*b);
+    //     println!("{board:#034b}");
+    // });
+    s.as_chunks::<{size_of::<GpuBoard>()}>().0.iter().take(90).for_each(|b| {
+        let board = GpuBoard::from_bytes(*b);
+        println!("{board}");
     });
     device.stop_capture();
 

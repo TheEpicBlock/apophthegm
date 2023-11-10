@@ -20,7 +20,7 @@ fn main(
     return;
   }
   var board = input[global_id.x];
-  let to_move = 1u << 3u;
+  let to_move = 0x8u;
 
   var out = 0u;
   for (var x = 0u; x < 8u; x++) {
@@ -30,10 +30,12 @@ fn main(
       if ((piece & 0x8u) == to_move) {
         if ((piece & 0x7u) == 6u) {
           // Pawn
-          if (!isColour(&board, to_move, x, y+1u)) {
+          let offset = ((to_move >> 3u) * 2u) - 1u;
+          if (!isColour(&board, to_move, x, y+offset)) {
             var new_board = board;
-            new_board.pieces[y] &= ~(0x4u << (x*4u));
-            new_board.pieces[y+1u] |= ((6u+to_move) << (x*4u));
+            new_board.pieces[y] &= ~(0xFu << (x*4u));
+            new_board.pieces[y+offset] &= ~(0xFu << (x*4u));
+            new_board.pieces[y+offset] |= (piece << (x*4u));
             output[out] = new_board;
             out += 1u;
           }

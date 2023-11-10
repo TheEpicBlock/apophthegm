@@ -12,6 +12,7 @@ pub trait Board: Display {
     fn set(&mut self, index: Location, piece: Option<Piece>);
 }
 
+#[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct StandardBoard([Option<Piece>; 64]);
 
@@ -43,6 +44,7 @@ impl IndexMut<Location> for StandardBoard {
     }
 }
 
+#[repr(transparent)]
 #[derive(Default, Clone, Copy)]
 pub struct GpuBoard([u8; 8*size_of::<u32>()]);
 
@@ -58,8 +60,8 @@ impl Board for GpuBoard {
             return None;
         }
         let side = match nibble & 0x08 {
-            0x08 => Side::White,
-            0x00 => Side::Black,
+            0x8 => Side::White,
+            0x0 => Side::Black,
             _ => unreachable!(),
         };
         // Will panic if the 'side' flag is set to white, but the piece is null. This shouldn't happen
@@ -80,7 +82,17 @@ impl Board for GpuBoard {
     }
 }
 
-pub fn convert<T: Board>(input: &mut impl Board) -> T {
+impl GpuBoard {
+    pub fn from_bytes(b: [u8; size_of::<Self>()]) -> Self {
+        GpuBoard(b)
+    }
+
+    pub fn to_bytes(self) -> [u8; size_of::<Self>()] {
+        self.0
+    }
+}
+
+pub fn convert<T: Board>(input: &impl Board) -> T {
     let mut out = T::new_empty();
     Location::all().for_each(|l| {
         out.set(l, input.get(l));
@@ -97,6 +109,17 @@ fn display(input: &impl Board, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Res
     }
 
     Ok(())
+}
+
+impl Display for GpuBoard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        display(self, f)
+    }
+}
+impl Display for StandardBoard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        display(self, f)
+    }
 }
 
 #[cfg(test)]
@@ -116,16 +139,5 @@ mod test {
         b.set(Location::new(0, 0), None);
         assert_eq!(b.get(Location::new(0, 0)), None);
         assert_eq!(b.get(Location::new(1, 0)), Some(piece));
-    }
-}
-
-impl Display for GpuBoard {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        display(self, f)
-    }
-}
-impl Display for StandardBoard {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        display(self, f)
     }
 }

@@ -29,11 +29,11 @@ impl GameState {
 
         {
             let pieces = fen.by_ref().take_while(|c| *c != ' ');
-            let mut y = 0;
+            let mut y = 7;
             let mut x = 0;
             for piece_char in pieces {
                 if piece_char == '/' {
-                    y += 1;
+                    y -= 1;
                     x = 0;
                     if y == 8 {
                         panic!("Fen has too many ranks");
