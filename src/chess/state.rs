@@ -91,16 +91,6 @@ impl GameState {
         self.pieces[loc] = piece;
     }
 
-    pub fn write(&self, bytes: &mut [u8]) {
-        for y in 0..8u8 {
-            for x_seg in 0..4u8 {
-                let p1 = self.get(Location::new(x_seg*2, y)).map_or(0, |p| p.as_nibble()) << 4;
-                let p2 = self.get(Location::new(x_seg*2+1, y)).map_or(0, |p| p.as_nibble());
-                bytes[(4*y + x_seg) as usize] = p1 | p2;
-            }
-        }
-    }
-
     pub fn get_board(&self) -> impl Board {
         self.pieces
     }
