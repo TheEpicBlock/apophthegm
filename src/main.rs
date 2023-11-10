@@ -1,17 +1,20 @@
 #![feature(ascii_char)]
 #![feature(ascii_char_variants)]
 #![feature(slice_as_chunks)]
+#![feature(slice_pattern)]
 
 mod chess;
 
+use core::slice::SlicePattern;
 use std::{mem::size_of, thread, time::Duration};
 
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends};
 
+use crate::chess::GameState;
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    thread::sleep(Duration::from_secs(3));
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends:wgpu::Backends::all(),
         dx12_shader_compiler: Default::default(),
@@ -29,6 +32,19 @@ async fn main() {
     let (device, queue) = adapter.request_device(&DeviceDescriptor::default(), None).await.expect("Failed to open GPU");
 
     device.start_capture();
+
+    let board = GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+
+    let in_buf = device.create_buffer(
+        &BufferDescriptor { 
+            label: Some("Input"),
+            size: 1000 * size_of::<f32>() as u64, 
+            usage: BufferUsages::STORAGE, 
+            mapped_at_creation: true
+        }
+    );
+    board.write(&mut in_buf.slice(..).get_mapped_range_mut());
+    in_buf.unmap();
 
     let out_buf = device.create_buffer(
         &BufferDescriptor { 
@@ -56,6 +72,16 @@ async fn main() {
                     binding: 0,
                     visibility: ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: false },
                         has_dynamic_offset: false,
                         min_binding_size: None
@@ -72,6 +98,10 @@ async fn main() {
             entries: &[
                 BindGroupEntry {
                     binding: 0,
+                    resource: wgpu::BindingResource::Buffer(in_buf.as_entire_buffer_binding())
+                },
+                BindGroupEntry {
+                    binding: 1,
                     resource: wgpu::BindingResource::Buffer(out_buf.as_entire_buffer_binding())
                 }
             ]
@@ -96,7 +126,7 @@ async fn main() {
     let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
     pass_encoder.set_pipeline(&pipeline);
     pass_encoder.set_bind_group(0, &bind_group, &[]);
-    pass_encoder.dispatch_workgroups((1000f64 / 64f64).ceil() as u32, 1, 1);
+    pass_encoder.dispatch_workgroups(1, 1, 1);
     drop(pass_encoder);
     command_encoder.copy_buffer_to_buffer(
         &out_buf,
@@ -120,9 +150,8 @@ async fn main() {
         .expect("communication failed")
         .expect("buffer reading failed");
     let s = &staging_buf.slice(..).get_mapped_range();
-    println!("{}", s.iter().count());
-    s.as_chunks::<{size_of::<f32>()}>().0.iter().for_each(|b| {
-        println!("{}", f32::from_le_bytes(*b));
+    s.as_chunks::<{size_of::<u64>()}>().0.iter().for_each(|b| {
+        println!("{}", u64::from_le_bytes(*b));
     });
     device.stop_capture();
 
