@@ -2,6 +2,9 @@
 #![feature(ascii_char_variants)]
 #![feature(slice_as_chunks)]
 #![feature(slice_pattern)]
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 
 mod chess;
 
@@ -34,6 +37,7 @@ async fn main() {
     device.start_capture();
 
     let board = GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    println!("Start:\n{}", board.get_board());
 
     let in_buf = device.create_buffer(
         &BufferDescriptor { 

@@ -1,10 +1,11 @@
-use std::{fmt::Display, ascii};
 
-use ::ascii::{AsAsciiStr, AsciiChar, ToAsciiChar};
-use enum_map::{EnumMap, Enum, enum_map};
+use enum_map::{EnumMap, enum_map};
+use crate::chess::board::Board;
+
+use super::{Location, board::StandardBoard, Piece, Side};
 
 pub struct GameState {
-    pieces: [Option<Piece>; 64],
+    pub pieces: StandardBoard,
     to_move: Side,
     en_passant_sq: Option<Location>,
     castles: EnumMap<Side, Castles>
@@ -17,7 +18,7 @@ pub struct Castles {
 
 impl Default for GameState {
     fn default() -> Self {
-        Self { pieces: [None; 64], to_move: Side::White, en_passant_sq: None, castles: enum_map! { _ => Castles { kingside: false, queenside: false }} }
+        Self { pieces: StandardBoard::new_empty(), to_move: Side::White, en_passant_sq: None, castles: enum_map! { _ => Castles { kingside: false, queenside: false }} }
     }
 }
 
@@ -83,11 +84,11 @@ impl GameState {
     }
 
     pub fn get(&self, loc: Location) -> Option<Piece> {
-        return self.pieces[loc.0 as usize];
+        return self.pieces[loc];
     }
 
     pub fn set(&mut self, loc: Location, piece: Option<Piece>) {
-        self.pieces[loc.0 as usize] = piece;
+        self.pieces[loc] = piece;
     }
 
     pub fn write(&self, bytes: &mut [u8]) {
@@ -99,89 +100,9 @@ impl GameState {
             }
         }
     }
-}
 
-#[derive(Clone, Copy)]
-pub struct Location(u8);
-
-impl Display for Location {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.x_as_char(), self.get_y())
+    pub fn get_board(&self) -> impl Board {
+        self.pieces
     }
 }
 
-impl Location {
-    pub fn new(x: u8, y: u8) -> Self {
-        assert!(x < 8);
-        assert!(y < 8);
-        Self((x << 3) | (y & 0x07))
-    }
-
-    fn from_letters(x: char, y: char) -> Self {
-        assert!(x.is_ascii_lowercase());
-        assert!(y.is_ascii_digit());
-        Self::new(x.to_ascii_char().unwrap().as_byte() - b'a', y.to_ascii_char().unwrap().as_byte() - b'0')
-    }
-
-    fn get_x(&self) -> u8 {
-        self.0 >> 3
-    }
-
-    fn x_as_char(&self) -> ascii::Char {
-        (b'A' + self.get_x()).as_ascii().unwrap()
-    }
-
-    fn get_y(&self) -> u8 {
-        self.0 & 0x07
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct Piece {
-    pub ty: PieceType,
-    pub side: Side
-}
-
-impl Piece {
-    pub fn new(side: Side, ty: PieceType) -> Self {
-        Piece { ty, side }
-    }
-
-    fn from_fen_char(char: char) -> Self {
-        let side = if char.is_ascii_uppercase() { Side::White } else { Side::Black };
-        let piece = match char.to_ascii_uppercase() {
-            'P' => PieceType::Pawn,
-            'N' => PieceType::Horsy,
-            'B' => PieceType::Bishop,
-            'R' => PieceType::Rook,
-            'Q' => PieceType::Queen,
-            'K' => PieceType::King,
-            _ => panic!("Invalid Fen piece {}", char),
-        };
-        return Piece::new(side, piece);
-    }
-
-    pub fn as_nibble(&self) -> u8 {
-        let side_indicator = match self.side {
-            Side::Black => 0x0,
-            Side::White => 0x8,
-        };
-        return side_indicator | (self.ty as u8);
-    }
-}
-
-#[derive(Clone, Copy, Enum)]
-pub enum Side {
-    Black,
-    White
-}
-
-#[derive(Clone, Copy)]
-pub enum PieceType {
-    King = 1,
-    Queen = 2,
-    Bishop = 3,
-    Rook = 4,
-    Horsy = 5,
-    Pawn = 6
-}
