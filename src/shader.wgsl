@@ -130,25 +130,27 @@ fn movePiece(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32,
 }
 
 fn evalPosition(board: ptr<function, Board>) -> f32 {
-  var eval_score = 0;
+  var eval_score = f32(0);
   for (var x = 0u; x < 8u; x++) {
     for (var y = 0u; y < 8u; y++) {
       // Pieces are nibbles
       let piece = getPiece(board, x, y);
-      var piece_score = 1;
+      var piece_score = 1.0;
       let piece_type = piece & 0x7u;
       if (piece_type == Pawn) {
-        piece_score = 1;
+        piece_score = 1.0;
       } else if (piece_type == Horsy || piece_type == Bishop) {
-        piece_score = 3;
+        piece_score = 3.0;
       } else if (piece_type == Rook) {
-        piece_score = 5;
-      } else if (piece_score == Queen) {
-        piece_score = 9;
+        piece_score = 5.0;
+      } else if (piece_type == Queen) {
+        piece_score = 9.0;
+      } else if (piece_type == King) {
+        piece_score = 9999.0;
       }
-      if (piece & 0x8u == 0u) {
+      if ((piece & 0x8u) == 0u) {
         // Piece is black
-        piece_score *= 1;
+        piece_score *= 01.0;
       }
       eval_score += piece_score;
     }
