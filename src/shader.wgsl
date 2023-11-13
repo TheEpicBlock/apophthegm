@@ -20,11 +20,14 @@ fn main(
   local_id : vec3u,
 ) {
   // Avoid accessing the buffer out of bounds
-  if (global_id.x >= 1u) {
+  if (global_id.x >= input_size) {
     return;
   }
   var board = input[global_id.x];
-  let to_move = 0x8u;
+  var to_move = 0x8u;
+  if (input_size > 1u) {
+    to_move = 0u;
+  }
 
   var pawn_start_rank = 6u; // 0-indexed!
   if (to_move == 0x8u) {

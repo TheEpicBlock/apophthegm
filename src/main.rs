@@ -36,14 +36,14 @@ async fn main() {
 
     device.start_capture();
 
-    let board = GameState::from_fen("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1");
+    let board = GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     println!("Start:\n{}", board.get_board());
 
     let in_buf = device.create_buffer(
         &BufferDescriptor { 
             label: Some("Input"),
             size: 1000 * size_of::<u32>() as u64, 
-            usage: BufferUsages::STORAGE, 
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST, 
             mapped_at_creation: true
         }
     );
@@ -64,7 +64,18 @@ async fn main() {
         &BufferDescriptor { 
             label: Some("Input Size Uniform"),
             size: 1 * size_of::<u32>() as u64, 
-            usage: BufferUsages::UNIFORM, 
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST, 
+            mapped_at_creation: true
+        }
+    );
+    input_size.slice(..).get_mapped_range_mut().copy_from_slice(bytemuck::bytes_of(&1u32));
+    input_size.unmap();
+
+    let just_zero = device.create_buffer(
+        &BufferDescriptor { 
+            label: Some("Output Index Atomic"),
+            size: 1 * size_of::<u32>() as u64, 
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, 
             mapped_at_creation: false
         }
     );
@@ -73,7 +84,7 @@ async fn main() {
         &BufferDescriptor { 
             label: Some("Output Index Atomic"),
             size: 1 * size_of::<u32>() as u64, 
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, 
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST, 
             mapped_at_creation: false
         }
     );
@@ -182,11 +193,64 @@ async fn main() {
         }
     );
 
+    {
+        let mut command_encoder = device.create_command_encoder(&CommandEncoderDescriptor::default());
+        let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
+        pass_encoder.set_pipeline(&pipeline);
+        pass_encoder.set_bind_group(0, &bind_group, &[]);
+        pass_encoder.dispatch_workgroups(1000, 1, 1);
+        drop(pass_encoder);
+        command_encoder.copy_buffer_to_buffer(
+            &out_buf,
+            0, // Source offset
+            &in_buf,
+            0, // Destination offset
+            1000 * size_of::<u32>() as u64,
+        );
+        command_encoder.copy_buffer_to_buffer(
+            &out_index,
+            0, // Source offset
+            &input_size,
+            0, // Destination offset
+            1 * size_of::<u32>() as u64,
+        );
+        command_encoder.copy_buffer_to_buffer(
+            &just_zero,
+            0, // Source offset
+            &out_index,
+            0, // Destination offset
+            1 * size_of::<u32>() as u64,
+        );
+        queue.submit([command_encoder.finish()]);
+
+        staging_buf
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, |result| {});
+        out_index_staging
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, |result| {});
+        device.poll(wgpu::Maintain::Wait); // TODO: poll in the background instead of blocking
+        let amount: u32 = *bytemuck::from_bytes(out_index_staging.slice(0..4).get_mapped_range().as_slice());
+        let s = &staging_buf.slice(..).get_mapped_range();
+        // s.as_chunks::<{size_of::<u32>()}>().0.iter().for_each(|b| {
+        //     let board = u32::from_le_bytes(*b);
+        //     println!("{board:#034b}");
+        // });
+        s.as_chunks::<{size_of::<GpuBoard>()}>().0.iter().take(amount as usize + 1).for_each(|b| {
+            let board = GpuBoard::from_bytes(*b);
+            println!("{board}");
+        });
+    }
+    staging_buf.unmap();
+    out_index_staging.unmap();
+
+    println!("TWOOO:");
+
     let mut command_encoder = device.create_command_encoder(&CommandEncoderDescriptor::default());
     let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
     pass_encoder.set_pipeline(&pipeline);
     pass_encoder.set_bind_group(0, &bind_group, &[]);
-    pass_encoder.dispatch_workgroups(1, 1, 1);
+    pass_encoder.dispatch_workgroups(1000, 1, 1);
     drop(pass_encoder);
     command_encoder.copy_buffer_to_buffer(
         &out_buf,
