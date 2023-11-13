@@ -5,7 +5,7 @@ use crate::chess::board::Board;
 use super::{Location, board::StandardBoard, Piece, Side};
 
 pub struct GameState {
-    pub pieces: StandardBoard,
+    pieces: StandardBoard,
     to_move: Side,
     en_passant_sq: Option<Location>,
     castles: EnumMap<Side, Castles>
