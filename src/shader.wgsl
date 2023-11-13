@@ -3,9 +3,13 @@ struct Board {
 }
 
 @group(0) @binding(0)
-var<storage, read> input: array<Board>;
+var<storage, read_write> input: array<Board>;
 @group(0) @binding(1)
 var<storage, read_write> output: array<Board>;
+@group(0) @binding(2)
+var<uniform> input_size: u32;
+@group(0) @binding(3)
+var<storage, read_write> out_index: atomic<u32>;
 
 @compute @workgroup_size(64)
 fn main(
@@ -28,7 +32,6 @@ fn main(
   }
 
 
-  var out = 0u;
   for (var x = 0u; x < 8u; x++) {
     for (var y = 0u; y < 8u; y++) {
       // Pieces are nibbles
@@ -40,26 +43,26 @@ fn main(
           // Upward movement
           if (getPiece(&board, x, y+offset) == 0u) {
             var new_board = movePiece(&board, piece, x, y, x, y+offset);
+            let out = atomicAdd(&out_index, 1u);
             output[out] = new_board;
-            out += 1u;
 
             if (y == pawn_start_rank && getPiece(&board, x, y+(offset*2u)) == 0u) {
               var new_board2 = movePiece(&board, piece, x, y, x, y+(offset*2u));
-              output[out] = new_board2;
-              out += 1u;
+            let out = atomicAdd(&out_index, 1u);
+            output[out] = new_board2;
             }
           }
           // Capture
           if (x + 1u < 8u && isOpponent(&board, to_move, x + 1u, y+offset)) {
             var new_board = movePiece(&board, piece, x, y, x + 1u, y+offset);
+            let out = atomicAdd(&out_index, 1u);
             output[out] = new_board;
-            out += 1u;
           }
           // Yes, this check is still correct, because it's unsigned
           if (x - 1u < 8u && isOpponent(&board, to_move, x - 1u, y+offset)) {
             var new_board = movePiece(&board, piece, x, y, x - 1u, y+offset);
+            let out = atomicAdd(&out_index, 1u);
             output[out] = new_board;
-            out += 1u;
           }
         }
       }
