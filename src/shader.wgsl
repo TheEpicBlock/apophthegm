@@ -52,7 +52,8 @@ fn main(
       // Pieces are nibbles
       let piece = getPiece(&board, x, y);
       if ((piece & 0x8u) == to_move) {
-        if ((piece & 0x7u) == Pawn) {
+        let piece_type = piece & 0x7u;
+        if (piece_type == Pawn) {
           // Pawn
           let offset = ((to_move >> 3u) * 2u) - 1u;
           // Upward movement
@@ -126,4 +127,31 @@ fn movePiece(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32,
   new_board.pieces[yNew] &= ~(0xFu << (xNew*4u));
   new_board.pieces[yNew] |= (piece << (xNew*4u));
   return new_board;
+}
+
+fn evalPosition(board: ptr<function, Board>) -> f32 {
+  var eval_score = 0;
+  for (var x = 0u; x < 8u; x++) {
+    for (var y = 0u; y < 8u; y++) {
+      // Pieces are nibbles
+      let piece = getPiece(board, x, y);
+      var piece_score = 1;
+      let piece_type = piece & 0x7u;
+      if (piece_type == Pawn) {
+        piece_score = 1;
+      } else if (piece_type == Horsy || piece_type == Bishop) {
+        piece_score = 3;
+      } else if (piece_type == Rook) {
+        piece_score = 5;
+      } else if (piece_score == Queen) {
+        piece_score = 9;
+      }
+      if (piece & 0x8u == 0u) {
+        // Piece is black
+        piece_score *= 1;
+      }
+      eval_score += piece_score;
+    }
+  }
+  return eval_score;
 }
