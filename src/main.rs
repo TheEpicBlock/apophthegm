@@ -15,6 +15,10 @@ use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsag
 
 use crate::chess::{GameState, GpuBoard, board::convert};
 
+const BOARDS_IN_BUF: u64 = 1048*1048;
+const WORKGROUP_SIZE: u64 = 64;
+const BUFFER_SIZE: u64 = size_of::<GpuBoard>() as u64 * BOARDS_IN_BUF;
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -42,7 +46,7 @@ async fn main() {
     let in_buf = device.create_buffer(
         &BufferDescriptor { 
             label: Some("Input"),
-            size: 1000 * size_of::<u32>() as u64, 
+            size: BUFFER_SIZE, 
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST, 
             mapped_at_creation: true
         }
@@ -54,7 +58,7 @@ async fn main() {
     let out_buf = device.create_buffer(
         &BufferDescriptor { 
             label: Some("Output"),
-            size: 1000 * size_of::<u32>() as u64, 
+            size: BUFFER_SIZE, 
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, 
             mapped_at_creation: false
         }
@@ -92,7 +96,7 @@ async fn main() {
     let staging_buf = device.create_buffer(
         &BufferDescriptor { 
             label: Some("staging"),
-            size: 1000 * size_of::<u32>() as u64, 
+            size: BUFFER_SIZE, 
             usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ, 
             mapped_at_creation: false
         }
@@ -205,7 +209,7 @@ async fn main() {
             0, // Source offset
             &in_buf,
             0, // Destination offset
-            1000 * size_of::<u32>() as u64,
+            BUFFER_SIZE,
         );
         command_encoder.copy_buffer_to_buffer(
             &out_index,
@@ -222,27 +226,7 @@ async fn main() {
             1 * size_of::<u32>() as u64,
         );
         queue.submit([command_encoder.finish()]);
-
-        staging_buf
-            .slice(..)
-            .map_async(wgpu::MapMode::Read, |result| {});
-        out_index_staging
-            .slice(..)
-            .map_async(wgpu::MapMode::Read, |result| {});
-        device.poll(wgpu::Maintain::Wait); // TODO: poll in the background instead of blocking
-        let amount: u32 = *bytemuck::from_bytes(out_index_staging.slice(0..4).get_mapped_range().as_slice());
-        let s = &staging_buf.slice(..).get_mapped_range();
-        // s.as_chunks::<{size_of::<u32>()}>().0.iter().for_each(|b| {
-        //     let board = u32::from_le_bytes(*b);
-        //     println!("{board:#034b}");
-        // });
-        s.as_chunks::<{size_of::<GpuBoard>()}>().0.iter().take(amount as usize + 1).for_each(|b| {
-            let board = GpuBoard::from_bytes(*b);
-            println!("{board}");
-        });
     }
-    staging_buf.unmap();
-    out_index_staging.unmap();
 
     println!("TWOOO:");
 
@@ -250,14 +234,14 @@ async fn main() {
     let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
     pass_encoder.set_pipeline(&pipeline);
     pass_encoder.set_bind_group(0, &bind_group, &[]);
-    pass_encoder.dispatch_workgroups(1000, 1, 1);
+    pass_encoder.dispatch_workgroups(ceil_div(BOARDS_IN_BUF, WORKGROUP_SIZE), 1, 1);
     drop(pass_encoder);
     command_encoder.copy_buffer_to_buffer(
         &out_buf,
         0, // Source offset
         &staging_buf,
         0, // Destination offset
-        1000 * size_of::<u32>() as u64,
+        BUFFER_SIZE,
     );
     command_encoder.copy_buffer_to_buffer(
         &out_index,
@@ -282,11 +266,16 @@ async fn main() {
     //     let board = u32::from_le_bytes(*b);
     //     println!("{board:#034b}");
     // });
+    println!("{}", amount);
     s.as_chunks::<{size_of::<GpuBoard>()}>().0.iter().take(amount as usize + 1).for_each(|b| {
         let board = GpuBoard::from_bytes(*b);
         println!("{board}");
     });
     device.stop_capture();
 
-    thread::sleep(Duration::from_secs(32));
+    // thread::sleep(Duration::from_secs(32));
+}
+
+fn ceil_div(a: u64, b: u64) -> u32 {
+    (a as f64 / b as f64).ceil() as u32
 }
