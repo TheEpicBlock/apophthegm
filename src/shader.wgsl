@@ -11,6 +11,13 @@ var<uniform> input_size: u32;
 @group(0) @binding(3)
 var<storage, read_write> out_index: atomic<u32>;
 
+const King = 1u;
+const Queen = 2u;
+const Bishop = 3u;
+const Rook = 4u;
+const Horsy = 5u;
+const Pawn = 6u;
+
 @compute @workgroup_size(64)
 fn main(
   @builtin(global_invocation_id)
@@ -34,25 +41,53 @@ fn main(
     pawn_start_rank = 1u; // 0-indexed!
   }
 
+  var pawn_promote_rank = 1u; // 0-indexed!
+  if (to_move == 0x8u) {
+    pawn_promote_rank = 6u; // 0-indexed!
+  }
+
 
   for (var x = 0u; x < 8u; x++) {
     for (var y = 0u; y < 8u; y++) {
       // Pieces are nibbles
       let piece = getPiece(&board, x, y);
       if ((piece & 0x8u) == to_move) {
-        if ((piece & 0x7u) == 6u) {
+        if ((piece & 0x7u) == Pawn) {
           // Pawn
           let offset = ((to_move >> 3u) * 2u) - 1u;
           // Upward movement
           if (getPiece(&board, x, y+offset) == 0u) {
-            var new_board = movePiece(&board, piece, x, y, x, y+offset);
-            let out = atomicAdd(&out_index, 1u);
-            output[out] = new_board;
+            if (y == pawn_promote_rank) {//0-indexed
+              // Promote
+              var new_board = board;
+              let clear_mask = ~(0xFu << (x*4u));
+              new_board.pieces[y] &= clear_mask; // Remove the pawn
+              let yNew = y+offset;
+              // Promote various
+              let out = atomicAdd(&out_index, 4u);
+              new_board.pieces[yNew] &= clear_mask;
+              new_board.pieces[yNew] |= (Queen << (x*4u));
+              output[out] = new_board;
+              new_board.pieces[yNew] &= clear_mask;
+              new_board.pieces[yNew] |= (Bishop << (x*4u));
+              output[out+1u] = new_board;
+              new_board.pieces[yNew] &= clear_mask;
+              new_board.pieces[yNew] |= (Horsy << (x*4u));
+              output[out+2u] = new_board;
+              new_board.pieces[yNew] &= clear_mask;
+              new_board.pieces[yNew] |= (Rook << (x*4u));
+              output[out+3u] = new_board;
+            } else {
+              // Regular upwards move
+              var new_board = movePiece(&board, piece, x, y, x, y+offset);
+              let out = atomicAdd(&out_index, 1u);
+              output[out] = new_board;
 
-            if (y == pawn_start_rank && getPiece(&board, x, y+(offset*2u)) == 0u) {
-              var new_board2 = movePiece(&board, piece, x, y, x, y+(offset*2u));
-            let out = atomicAdd(&out_index, 1u);
-            output[out] = new_board2;
+              if (y == pawn_start_rank && getPiece(&board, x, y+(offset*2u)) == 0u) {
+                var new_board2 = movePiece(&board, piece, x, y, x, y+(offset*2u));
+                let out = atomicAdd(&out_index, 1u);
+                output[out] = new_board2;
+              }
             }
           }
           // Capture
