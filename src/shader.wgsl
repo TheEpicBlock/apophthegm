@@ -75,9 +75,28 @@ fn main(
           if (x - 1u < 8u && isOpponent(&board, to_move, x - 1u, y+offset)) {
             pawn_move(&board, x, y, x - 1u, y+offset, pawn_promote_rank, to_move);
           }
+        } else if (piece_type == King) {
+          try_king_move(&board, piece, x, y, (x - 1u), (y - 1u), to_move);
+          try_king_move(&board, piece, x, y, (x + 0u), (y - 1u), to_move);
+          try_king_move(&board, piece, x, y, (x + 1u), (y - 1u), to_move);
+          try_king_move(&board, piece, x, y, (x - 1u), (y + 0u), to_move);
+          try_king_move(&board, piece, x, y, (x + 1u), (y + 0u), to_move);
+          try_king_move(&board, piece, x, y, (x - 1u), (y + 1u), to_move);
+          try_king_move(&board, piece, x, y, (x + 0u), (y + 1u), to_move);
+          try_king_move(&board, piece, x, y, (x + 1u), (y + 1u), to_move);
         }
       }
     }
+  }
+}
+
+fn try_king_move(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32, yNew: u32, to_move: u32) {
+  if (xNew < 0u) { return; }
+  if (yNew < 0u) { return; }
+  if (!isColour(board, to_move, xNew, yNew)) {
+    var new_board = movePiece(board, piece, x, y, xNew, yNew);
+    let out = atomicAdd(&out_index, 1u);
+    output[out] = new_board;
   }
 }
 
