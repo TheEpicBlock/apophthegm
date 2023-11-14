@@ -93,9 +93,53 @@ fn main(
           try_move(&board, piece, x, y, (x + 1u), (y + 2u), to_move);
           try_move(&board, piece, x, y, (x - 1u), (y - 2u), to_move);
           try_move(&board, piece, x, y, (x + 1u), (y - 2u), to_move);
+        } else if (piece_type == Rook || piece_type == Queen) {
+          move_in_dir(&board, piece, x, y, 1, 0, to_move);
+          move_in_dir(&board, piece, x, y, -1, 0, to_move);
+          move_in_dir(&board, piece, x, y, 0, 1, to_move);
+          move_in_dir(&board, piece, x, y, 0, -1, to_move);
+        }
+
+        if (piece_type == Bishop || piece_type == Queen) {
+          move_in_dir(&board, piece, x, y, 1, 1, to_move);
+          move_in_dir(&board, piece, x, y, 1, -1, to_move);
+          move_in_dir(&board, piece, x, y, -1, 1, to_move);
+          move_in_dir(&board, piece, x, y, -1, -1, to_move);
         }
       }
     }
+  }
+}
+
+fn move_in_dir(board: ptr<function, Board>, piece: u32, x: u32, y: u32, dx: i32, dy: i32, to_move: u32) {
+  var xNew = x + u32(dx);
+  var yNew = y + u32(dy);
+  if (xNew >= 8u) { return; }
+  if (yNew >= 8u) { return; }
+  if (isColour(board, to_move, xNew, yNew)) { return; }
+  var new_board = *board;
+  new_board.pieces[y] &= ~(0xFu << (x*4u)); // Remove the original piece
+  loop {
+    let target_square = getPiece(board, xNew, yNew);
+    if (target_square != 0u && (target_square & 0x8u) == to_move) {
+      // Trying to move to a square with an own piece
+      return;
+    }
+    new_board.pieces[yNew] &= ~(0xFu << (xNew*4u));
+    new_board.pieces[yNew] |= (piece << (xNew*4u));
+    let out = atomicAdd(&out_index, 1u);
+    output[out] = new_board;
+
+    if (target_square != 0u && (target_square & 0x8u) != to_move) {
+      // This was a capture, no more moves
+      return;
+    }
+
+    xNew = xNew + u32(dx);
+    yNew = yNew + u32(dy);
+    if (xNew >= 8u) { return; }
+    if (yNew >= 8u) { return; }
+    new_board.pieces[yNew - u32(dy)] &= ~(0xFu << ((xNew - u32(dx))*4u));
   }
 }
 
