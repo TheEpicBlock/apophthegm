@@ -49,7 +49,7 @@ async fn pawn_basic() {
     assert_moves(
         "8/8/8/8/8/P/8/8 w KQkq - 0 1",
         &[
-            "8/8/8/8/P/8/8/8 w KQkq - 0 1"
+            "8/8/8/8/P/8/8/8 b KQkq - 0 1"
         ]
     ).await;
 }
@@ -59,8 +59,54 @@ async fn pawn_double() {
     assert_moves(
         "8/8/8/8/8/8/P/8 w KQkq - 0 1",
         &[
-            "8/8/8/8/8/P/8/8 w KQkq - 0 1",
-            "8/8/8/8/P/8/8/8 w KQkq - 0 1"
+            "8/8/8/8/8/P/8/8 b KQkq - 0 1",
+            "8/8/8/8/P/8/8/8 b KQkq - 0 1"
+        ]
+    ).await;
+}
+
+#[tokio::test]
+async fn pawn_block() {
+    assert_moves(
+        "8/8/8/8/8/n/P/8 w KQkq - 0 1",
+        &[
+        ]
+    ).await;
+}
+
+#[tokio::test]
+async fn pawn_capture() {
+    assert_moves(
+        "8/8/8/8/1n6/P/8/8 w KQkq - 0 1",
+        &[
+            "8/8/8/8/1P6/8/8/8 b KQkq - 0 1",
+            "8/8/8/8/Pn6/8/8/8 b KQkq - 0 1",
+        ]
+    ).await;
+}
+
+#[tokio::test]
+async fn pawn_promote() {
+    assert_moves(
+        "8/P7/8/8/8/8/8/8 w KQkq - 0 1",
+        &[
+            "Q/8/8/8/8/8/8/8 b KQkq - 0 1",
+            "R/8/8/8/8/8/8/8 b KQkq - 0 1",
+            "B/8/8/8/8/8/8/8 b KQkq - 0 1",
+            "N/8/8/8/8/8/8/8 b KQkq - 0 1",
+        ]
+    ).await;
+}
+
+#[tokio::test]
+async fn pawn_capture_promote() {
+    assert_moves(
+        "nr6/P/8/8/8/8/8/8 w KQkq - 0 1",
+        &[
+            "nQ6/8/8/8/8/8/8/8 b KQkq - 0 1",
+            "nR6/8/8/8/8/8/8/8 b KQkq - 0 1",
+            "nB6/8/8/8/8/8/8/8 b KQkq - 0 1",
+            "nN6/8/8/8/8/8/8/8 b KQkq - 0 1",
         ]
     ).await;
 }
@@ -70,14 +116,14 @@ async fn king() {
     assert_moves(
         "8/8/8/8/8/8/1K6/8 w KQkq - 0 1",
         &[
-            "8/8/8/8/8/8/2K5/8 w KQkq - 0 1",
-            "8/8/8/8/8/8/K7/8 w KQkq - 0 1",
-            "8/8/8/8/8/8/8/K7 w KQkq - 0 1",
-            "8/8/8/8/8/8/8/1K6 w KQkq - 0 1",
-            "8/8/8/8/8/8/8/2K5 w KQkq - 0 1",
-            "8/8/8/8/8/K7/8/8 w KQkq - 0 1",
-            "8/8/8/8/8/1K6/8/8 w KQkq - 0 1",
-            "8/8/8/8/8/2K5/8/8 w KQkq - 0 1",
+            "8/8/8/8/8/8/2K5/8 b KQkq - 0 1",
+            "8/8/8/8/8/8/K7/8 b KQkq - 0 1",
+            "8/8/8/8/8/8/8/K7 b KQkq - 0 1",
+            "8/8/8/8/8/8/8/1K6 b KQkq - 0 1",
+            "8/8/8/8/8/8/8/2K5 b KQkq - 0 1",
+            "8/8/8/8/8/K7/8/8 b KQkq - 0 1",
+            "8/8/8/8/8/1K6/8/8 b KQkq - 0 1",
+            "8/8/8/8/8/2K5/8/8 b KQkq - 0 1",
         ]
     ).await;
 }
@@ -87,9 +133,9 @@ async fn king_corner() {
     assert_moves(
         "8/8/8/8/8/8/8/K7 w KQkq - 0 1",
         &[
-            "8/8/8/8/8/8/8/1K6 w KQkq - 0 1",
-            "8/8/8/8/8/8/K/8 w KQkq - 0 1",
-            "8/8/8/8/8/8/1K6/8 w KQkq - 0 1",
+            "8/8/8/8/8/8/8/1K6 b KQkq - 0 1",
+            "8/8/8/8/8/8/K/8 b KQkq - 0 1",
+            "8/8/8/8/8/8/1K6/8 b KQkq - 0 1",
         ]
     ).await;
 }

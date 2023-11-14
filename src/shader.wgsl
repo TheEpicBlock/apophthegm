@@ -104,20 +104,20 @@ fn pawn_move(board: ptr<function, Board>, x: u32, y: u32, xNew: u32, yNew: u32, 
   if (yNew == pawn_promote_rank) {
     // Promote
     var new_board = *board;
-    let clear_mask = ~(0xFu << (x*4u));
-    new_board.pieces[y] &= clear_mask; // Remove the pawn
+    new_board.pieces[y] &= ~(0xFu << (x*4u)); // Remove the original pawn
+    let clear_mask = ~(0xFu << (xNew*4u));
     let out = atomicAdd(&out_index, 4u);
     new_board.pieces[yNew] &= clear_mask;
-    new_board.pieces[yNew] |= ((Queen | to_move) << (x*4u));
+    new_board.pieces[yNew] |= ((Queen | to_move) << (xNew*4u));
     output[out] = new_board;
     new_board.pieces[yNew] &= clear_mask;
-    new_board.pieces[yNew] |= ((Bishop | to_move) << (x*4u));
+    new_board.pieces[yNew] |= ((Bishop | to_move) << (xNew*4u));
     output[out+1u] = new_board;
     new_board.pieces[yNew] &= clear_mask;
-    new_board.pieces[yNew] |= ((Horsy | to_move) << (x*4u));
+    new_board.pieces[yNew] |= ((Horsy | to_move) << (xNew*4u));
     output[out+2u] = new_board;
     new_board.pieces[yNew] &= clear_mask;
-    new_board.pieces[yNew] |= ((Rook | to_move) << (x*4u));
+    new_board.pieces[yNew] |= ((Rook | to_move) << (xNew*4u));
     output[out+3u] = new_board;
   } else {
     var new_board = movePiece(board, (Pawn | to_move), x, y, xNew, yNew);
