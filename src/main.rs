@@ -34,21 +34,13 @@ async fn main() {
     engine.set_input([convert(&starter_board.get_board())]).await;
 
     engine.run_pass(false);
-    engine.run_pass(true);
-
-    let out = engine.get_output().await;
-    println!("Found {} states", out.get_size());
-    out.iter().for_each(|b| {
-        println!("{b}");
-    });
-    drop(out);
-
+    engine.run_pass(false);
     engine.run_pass(true);
     let out = engine.get_output().await;
     println!("Found {} states", out.get_size());
-    out.iter().for_each(|b| {
-        println!("{b}");
-    });
+    // out.iter().for_each(|b| {
+    //     println!("{b}");
+    // });
     drop(out);
 }
 
