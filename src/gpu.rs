@@ -10,13 +10,15 @@ use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsag
 use crate::chess::GpuBoard;
 use crate::wgpu_util::SliceExtension;
 
-const BOARDS_IN_BUF: u64 = 1024*1024*2;
 const WORKGROUP_SIZE: u64 = 64;
-const BUFFER_SIZE: u64 = size_of::<GpuBoard>() as u64 * BOARDS_IN_BUF;
 
 pub struct GpuChessEvaluator {
     device: Device,
     queue: Queue,
+    /// The amount of boards per buffer (for buffers that contain boards)
+    boards_per_buf: u64,
+    /// The size of buffers (for buffers that contain boards) (in bytes)
+    buffer_size: u64,
     in_buf: Buffer,
     out_buf: Buffer,
     input_size: Buffer,
@@ -56,14 +58,14 @@ impl GpuChessEvaluator {
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.pipeline);
         pass_encoder.set_bind_group(0, &self.bind, &[]);
-        pass_encoder.dispatch_workgroups((BOARDS_IN_BUF as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
+        pass_encoder.dispatch_workgroups((self.boards_per_buf as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
         drop(pass_encoder);
         command_encoder.copy_buffer_to_buffer(
             &self.out_buf,
             0, // Source offset
             &self.in_buf,
             0, // Destination offset
-            BUFFER_SIZE,
+            self.buffer_size,
         );
         command_encoder.copy_buffer_to_buffer(
             &self.out_index,
@@ -85,7 +87,7 @@ impl GpuChessEvaluator {
                 0, // Source offset
                 &self.staging_buf,
                 0, // Destination offset
-                BUFFER_SIZE,
+                self.buffer_size,
             );
         }
         command_encoder.copy_buffer_to_buffer(
@@ -152,15 +154,25 @@ pub async fn init_gpu_evaluator() -> GpuChessEvaluator {
         compatible_surface: None,
     }).await.expect("WebGPU no does work :(");
 
-    info!("Using gpu adapter: {:?}", adapter);
-    info!("Buffers size: {BUFFER_SIZE} ({BOARDS_IN_BUF} boards)");
+    info!("Using gpu adapter: {:?}", adapter.get_info());
 
     let (device, queue) = adapter.request_device(&DeviceDescriptor::default(), None).await.expect("Failed to open GPU");
+
+    // Buffer size calculations
+    let max_buffer_size = u64::min(device.limits().max_buffer_size, device.limits().max_storage_buffer_binding_size as u64);
+    let max_boards_per_buf = max_buffer_size / size_of::<GpuBoard>() as u64;
+    info!("Max buffer size is {max_buffer_size}, which fits {max_boards_per_buf} boards");
+    let max_dispatch = device.limits().max_compute_workgroups_per_dimension as u64;
+    let max_boards_dispatch = max_dispatch * WORKGROUP_SIZE;
+    info!("Max dispatch is {max_dispatch}, which fits {max_boards_dispatch} boards");
+    let boards_per_buf = u64::min(max_boards_per_buf, max_boards_dispatch);
+    let buffer_size = boards_per_buf * size_of::<GpuBoard>() as u64;
+    info!("We're allocating buffers of size {buffer_size}, which fits {boards_per_buf} boards");
 
     let in_buf = device.create_buffer(
         &BufferDescriptor { 
             label: Some("Input"),
-            size: BUFFER_SIZE, 
+            size: buffer_size, 
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST, 
             mapped_at_creation: true
         }
@@ -169,7 +181,7 @@ pub async fn init_gpu_evaluator() -> GpuChessEvaluator {
     let out_buf = device.create_buffer(
         &BufferDescriptor { 
             label: Some("Output"),
-            size: BUFFER_SIZE, 
+            size: buffer_size, 
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, 
             mapped_at_creation: false
         }
@@ -205,7 +217,7 @@ pub async fn init_gpu_evaluator() -> GpuChessEvaluator {
     let staging_buf = device.create_buffer(
         &BufferDescriptor { 
             label: Some("staging"),
-            size: BUFFER_SIZE, 
+            size: buffer_size, 
             usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ, 
             mapped_at_creation: false
         }
@@ -307,5 +319,5 @@ pub async fn init_gpu_evaluator() -> GpuChessEvaluator {
         }
     );
 
-    return GpuChessEvaluator { device, queue, in_buf, out_buf, input_size, just_zero, out_index, staging_buf, out_index_staging, bind_layout: bind_group_layout, bind: bind_group, pipeline };
+    return GpuChessEvaluator { device, queue, in_buf, out_buf, input_size, just_zero, out_index, staging_buf, out_index_staging, bind_layout: bind_group_layout, bind: bind_group, pipeline, boards_per_buf, buffer_size };
 }
