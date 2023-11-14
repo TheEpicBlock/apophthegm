@@ -121,23 +121,6 @@ async fn pawn_capture_promote() {
 }
 
 #[tokio::test]
-async fn king() {
-    assert_moves(
-        "8/8/8/8/8/8/1K6/8 w KQkq - 0 1",
-        &[
-            "8/8/8/8/8/8/2K5/8 b KQkq - 0 1",
-            "8/8/8/8/8/8/K7/8 b KQkq - 0 1",
-            "8/8/8/8/8/8/8/K7 b KQkq - 0 1",
-            "8/8/8/8/8/8/8/1K6 b KQkq - 0 1",
-            "8/8/8/8/8/8/8/2K5 b KQkq - 0 1",
-            "8/8/8/8/8/K7/8/8 b KQkq - 0 1",
-            "8/8/8/8/8/1K6/8/8 b KQkq - 0 1",
-            "8/8/8/8/8/2K5/8/8 b KQkq - 0 1",
-        ]
-    ).await;
-}
-
-#[tokio::test]
 async fn horse() {
     assert_moves(
         "8/8/8/3N4/8/8/8/8 w - - 0 1",
@@ -236,6 +219,40 @@ async fn queen() {
             "8/8/2Q5/4p3/8/8/8/8 b - - 0 1",
             "8/8/2b5/4p3/3Q4/8/8/8 b - - 0 1",
             "8/8/2b5/4Q3/8/8/8/8 b - - 0 1",
+        ]
+    ).await;
+}
+
+#[tokio::test]
+async fn king() {
+    assert_moves(
+        "8/8/8/8/8/8/1K6/8 w KQkq - 0 1",
+        &[
+            "8/8/8/8/8/8/2K5/8 b KQkq - 0 1",
+            "8/8/8/8/8/8/K7/8 b KQkq - 0 1",
+            "8/8/8/8/8/8/8/K7 b KQkq - 0 1",
+            "8/8/8/8/8/8/8/1K6 b KQkq - 0 1",
+            "8/8/8/8/8/8/8/2K5 b KQkq - 0 1",
+            "8/8/8/8/8/K7/8/8 b KQkq - 0 1",
+            "8/8/8/8/8/1K6/8/8 b KQkq - 0 1",
+            "8/8/8/8/8/2K5/8/8 b KQkq - 0 1",
+        ]
+    ).await;
+}
+
+
+#[tokio::test]
+async fn king_blocked() {
+    assert_moves(
+        "8/8/8/8/8/8/1KP5/8 w KQkq - 0 1",
+        &[
+            "8/8/8/8/8/8/K1P5/8 b KQkq - 0 1",
+            "8/8/8/8/8/8/2P5/K7 b KQkq - 0 1",
+            "8/8/8/8/8/8/2P5/1K6 b KQkq - 0 1",
+            "8/8/8/8/8/8/2P5/2K5 b KQkq - 0 1",
+            "8/8/8/8/8/K7/2P5/8 b KQkq - 0 1",
+            "8/8/8/8/8/1K6/2P5/8 b KQkq - 0 1",
+            "8/8/8/8/8/2K5/2P5/8 b KQkq - 0 1",
         ]
     ).await;
 }
