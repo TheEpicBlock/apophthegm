@@ -43,7 +43,3 @@ async fn main() {
     // });
     drop(out);
 }
-
-fn ceil_div(a: u64, b: u64) -> u32 {
-    (a as f64 / b as f64).ceil() as u32
-}
