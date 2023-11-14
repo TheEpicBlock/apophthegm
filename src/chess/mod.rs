@@ -17,7 +17,7 @@ pub struct Location(u8);
 
 impl Display for Location {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.x_as_char(), self.get_y())
+        write!(f, "{}{}", self.x_as_char(), self.get_y()+1) // +1 because of 0-indexing
     }
 }
 
@@ -39,7 +39,7 @@ impl Location {
     }
 
     fn x_as_char(&self) -> ascii::Char {
-        (b'A' + self.get_x()).as_ascii().unwrap()
+        (b'a' + self.get_x()).as_ascii().unwrap()
     }
 
     fn get_y(&self) -> u8 {
@@ -48,5 +48,14 @@ impl Location {
 
     pub fn all() -> impl Iterator<Item = Location> {
         (0..64).into_iter().map(|i| Location(i))
+    }
+}
+
+// Todo, encode promotion
+pub struct Move(pub Location, pub Location);
+
+impl Display for Move {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.0, self.1)
     }
 }

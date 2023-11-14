@@ -32,17 +32,16 @@ async fn main() {
     println!("Start:\n{}", starter_board.get_board());
 
     engine.set_input([convert(&starter_board.get_board())], Side::White, 0).await;
-
-    engine.run_pass(false);
-    engine.set_global_data(Side::Black, 1);
-    engine.run_pass(false);
-    engine.set_global_data(Side::White, 2);
     engine.run_pass(true);
+
+    engine.set_global_data(Side::Black, 1);
+    engine.run_pass(true);
+
     let out = engine.get_output().await;
     println!("Found {} states", out.get_size());
-    // out.iter().for_each(|b| {
-    //     println!("{b}");
-    // });
+    out.iter().for_each(|b| {
+        println!("{b}");
+    });
     drop(out);
 }
 

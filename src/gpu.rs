@@ -46,6 +46,7 @@ impl GpuChessEvaluator {
         drop(view);
         self.in_buf.unmap();
 
+        assert!(move_num < 4);
         let mut data = [0; 12];
         data[0..4].copy_from_slice(bytemuck::bytes_of(&(i as u32)));
         data[4..8].copy_from_slice(bytemuck::bytes_of(&to_move.gpu_representation()));
@@ -54,6 +55,7 @@ impl GpuChessEvaluator {
     }
 
     pub fn set_global_data(&self, to_move: Side, move_num: u32) {
+        assert!(move_num < 4);
         let mut data = [0; 8];
         data[0..4].copy_from_slice(bytemuck::bytes_of(&to_move.gpu_representation()));
         data[4..8].copy_from_slice(bytemuck::bytes_of(&move_num));

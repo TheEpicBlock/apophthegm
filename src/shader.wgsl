@@ -130,6 +130,7 @@ fn move_in_dir(board: ptr<function, Board>, piece: u32, x: u32, y: u32, dx: i32,
     }
     new_board.pieces[yNew] &= ~(0xFu << (xNew*4u));
     new_board.pieces[yNew] |= (piece << (xNew*4u));
+    setMove(&new_board, x, y, xNew, yNew, 0u);
     let out = atomicAdd(&out_index, 1u);
     output[out] = new_board;
 
@@ -165,15 +166,19 @@ fn pawn_move(board: ptr<function, Board>, x: u32, y: u32, xNew: u32, yNew: u32, 
     let out = atomicAdd(&out_index, 4u);
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Queen | to_move) << (xNew*4u));
+    setMove(&new_board, x, y, xNew, yNew, Queen);
     output[out] = new_board;
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Bishop | to_move) << (xNew*4u));
+    setMove(&new_board, x, y, xNew, yNew, Bishop);
     output[out+1u] = new_board;
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Horsy | to_move) << (xNew*4u));
+    setMove(&new_board, x, y, xNew, yNew, Horsy);
     output[out+2u] = new_board;
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Rook | to_move) << (xNew*4u));
+    setMove(&new_board, x, y, xNew, yNew, Rook);
     output[out+3u] = new_board;
   } else {
     var new_board = movePiece(board, (Pawn | to_move), x, y, xNew, yNew);
@@ -201,7 +206,33 @@ fn movePiece(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32,
   new_board.pieces[y] &= ~(0xFu << (x*4u));
   new_board.pieces[yNew] &= ~(0xFu << (xNew*4u));
   new_board.pieces[yNew] |= (piece << (xNew*4u));
+  setMove(&new_board, x, y, xNew, yNew, 0u);
   return new_board;
+}
+
+fn setMove(board: ptr<function, Board>, x: u32, y: u32, xNew: u32, yNew: u32, special: u32) {
+  let move_u16 = (special << 12u) | (x << 9u) | (y << 6u) | (xNew << 3u) | (yNew << 0u);
+  switch globals.move_index {
+    case 0u: {
+      (*board).pieces[8] &= ~(0xFFu);
+      (*board).pieces[8] |= move_u16;
+    }
+    case 1u: {
+      (*board).pieces[8] &= ~(0xFFu << 16u);
+      (*board).pieces[8] |= (move_u16 << 16u);
+    }
+    case 2u: {
+      (*board).pieces[9] &= ~(0xFFu);
+      (*board).pieces[9] |= move_u16;
+    }
+    case 3u: {
+      (*board).pieces[9] &= ~(0xFFu << 16u);
+      (*board).pieces[9] |= (move_u16 << 16u);
+    }
+    default: {
+      // I trust this doesn't happen, for I'm an ostrich
+    }
+  } 
 }
 
 fn evalPosition(board: ptr<function, Board>) -> f32 {

@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::ops::{Index, IndexMut};
 use std::{fmt::Display, ascii, mem::size_of, default};
 
-use super::{Location, Piece, Side, PieceType};
+use super::{Location, Piece, Side, PieceType, Move};
 
 pub trait Board: Display {
     fn new_empty() -> Self;
@@ -90,6 +90,22 @@ impl GpuBoard {
     pub fn to_bytes(self) -> [u8; size_of::<Self>()] {
         self.0
     }
+
+    pub fn get_moves(&self) -> impl Iterator<Item = Move> + '_ {
+        let bytes = &self.0[(8*4)..(10*4)];
+        bytes.as_chunks::<2>().0.iter().filter_map(|m| {
+            let move_u16 = u16::from_le_bytes(*m);
+            if move_u16 == 0 {
+                return None;
+            }
+            let x = ((move_u16 >> 9) & 0x7) as u8;
+            let y = ((move_u16 >> 6) & 0x7) as u8;
+            let x_new = ((move_u16 >> 3) & 0x7) as u8;
+            let y_new = ((move_u16 >> 0) & 0x7) as u8;
+            
+            return Some(Move(Location::new(x, y), Location::new(x_new, y_new)));
+        })
+    }
 }
 
 pub fn convert<T: Board>(input: &impl Board) -> T {
@@ -113,7 +129,12 @@ fn display(input: &impl Board, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Res
 
 impl Display for GpuBoard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        display(self, f)
+        display(self, f)?;
+        for m in self.get_moves() {
+            write!(f, "{m} ")?;
+        }
+        write!(f, "\n")?;
+        Ok(())
     }
 }
 impl Display for StandardBoard {
