@@ -1,8 +1,17 @@
 use std::fmt;
 
-use crate::{gpu::{GpuChessEvaluator, init_gpu_evaluator}, chess::{StandardBoard, GameState}};
+use wgpu::Adapter;
+use pollster::FutureExt as _;
+
+use crate::{gpu::{GpuChessEvaluator, init_gpu_evaluator, init_adapter}, chess::{StandardBoard, GameState}};
 
 use super::{Board, board::convert, GpuBoard};
+
+// Only create an adapter once, to ensure no threading issues present themselves
+#[ctor::ctor]
+static GPU_ADAPTER: Adapter = {
+    init_adapter().block_on()
+};
 
 trait TestEngine {
     type Out;
@@ -14,7 +23,7 @@ struct GpuTester;
 impl TestEngine for GpuTester {
     type Out = GpuBoard;
     async fn get_moves(board_in: GameState) -> Vec<Self::Out> {
-        let mut engine = init_gpu_evaluator().await;
+        let mut engine = init_gpu_evaluator(&GPU_ADAPTER).await;
         engine.set_input([convert(&board_in.get_board())]).await;
         engine.run_pass(true);
         let out = engine.get_output().await;

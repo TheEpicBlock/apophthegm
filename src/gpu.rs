@@ -5,7 +5,7 @@ use std::slice::Iter;
 
 use log::info;
 use tokio::join;
-use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends, Buffer, BindGroup, ComputePipeline, BufferSlice, MapMode, Device, Queue, SubmissionIndex, BufferView};
+use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends, Buffer, BindGroup, ComputePipeline, BufferSlice, MapMode, Device, Queue, SubmissionIndex, BufferView, Adapter};
 
 use crate::chess::GpuBoard;
 use crate::wgpu_util::SliceExtension;
@@ -141,19 +141,7 @@ impl Drop for ChessOutputBufferView<'_> {
     }
 }
 
-pub async fn init_gpu_evaluator() -> GpuChessEvaluator {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends:wgpu::Backends::all(),
-        dx12_shader_compiler: Default::default(),
-        flags: Default::default(),
-        gles_minor_version: Default::default(),
-    });
-    let adapter = instance.request_adapter(&&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::default(),
-        force_fallback_adapter: false,
-        compatible_surface: None,
-    }).await.expect("WebGPU no does work :(");
-
+pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
     info!("Using gpu adapter: {:?}", adapter.get_info());
 
     let (device, queue) = adapter.request_device(&DeviceDescriptor::default(), None).await.expect("Failed to open GPU");
@@ -320,4 +308,19 @@ pub async fn init_gpu_evaluator() -> GpuChessEvaluator {
     );
 
     return GpuChessEvaluator { device, queue, in_buf, out_buf, input_size, just_zero, out_index, staging_buf, out_index_staging, bind_layout: bind_group_layout, bind: bind_group, pipeline, boards_per_buf, buffer_size };
+}
+
+pub async fn init_adapter() -> Adapter {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends:wgpu::Backends::all(),
+        dx12_shader_compiler: Default::default(),
+        flags: Default::default(),
+        gles_minor_version: Default::default(),
+    });
+    let adapter = instance.request_adapter(&&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::default(),
+        force_fallback_adapter: false,
+        compatible_surface: None,
+    }).await.expect("WebGPU no does work :(");
+    return adapter;
 }
