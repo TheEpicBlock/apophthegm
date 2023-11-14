@@ -1,6 +1,8 @@
 pub mod state;
 pub mod board;
 pub mod piece;
+#[cfg(test)]
+pub mod test;
 
 use std::fmt::Display;
 use std::ascii;

@@ -45,7 +45,7 @@ impl IndexMut<Location> for StandardBoard {
 }
 
 #[repr(transparent)]
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct GpuBoard([u8; 8*size_of::<u32>()]);
 
 impl Board for GpuBoard {
