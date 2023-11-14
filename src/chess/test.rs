@@ -81,3 +81,15 @@ async fn king() {
         ]
     ).await;
 }
+
+#[tokio::test]
+async fn king_corner() {
+    assert_moves(
+        "8/8/8/8/8/8/8/K7 w KQkq - 0 1",
+        &[
+            "8/8/8/8/8/8/8/1K6 w KQkq - 0 1",
+            "8/8/8/8/8/8/K/8 w KQkq - 0 1",
+            "8/8/8/8/8/8/1K6/8 w KQkq - 0 1",
+        ]
+    ).await;
+}

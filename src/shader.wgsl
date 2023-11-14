@@ -91,8 +91,8 @@ fn main(
 }
 
 fn try_king_move(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32, yNew: u32, to_move: u32) {
-  if (xNew < 0u) { return; }
-  if (yNew < 0u) { return; }
+  if (xNew >= 8u) { return; }
+  if (yNew >= 8u) { return; }
   if (!isColour(board, to_move, xNew, yNew)) {
     var new_board = movePiece(board, piece, x, y, xNew, yNew);
     let out = atomicAdd(&out_index, 1u);
