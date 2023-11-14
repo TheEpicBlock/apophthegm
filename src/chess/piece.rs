@@ -56,6 +56,15 @@ pub enum Side {
     White
 }
 
+impl Side {
+    pub fn gpu_representation(&self) -> u32 {
+        return match self {
+            Side::Black => 0x0,
+            Side::White => 0x8,
+        };
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum PieceType {

@@ -45,12 +45,12 @@ impl IndexMut<Location> for StandardBoard {
 }
 
 #[repr(transparent)]
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
-pub struct GpuBoard([u8; 8*size_of::<u32>()]);
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct GpuBoard([u8; 10*size_of::<u32>()]);
 
 impl Board for GpuBoard {
     fn new_empty() -> Self {
-        Self([0; 32])
+        Self([0; 10*size_of::<u32>()])
     }
 
     fn get(&self, index: Location) -> Option<Piece> {

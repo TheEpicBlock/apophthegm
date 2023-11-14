@@ -16,7 +16,7 @@ use std::{mem::size_of, thread, time::Duration};
 use gpu::init_gpu_evaluator;
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends};
 
-use crate::{chess::{GameState, GpuBoard, board::convert}, gpu::init_adapter};
+use crate::{chess::{GameState, GpuBoard, board::convert, Side}, gpu::init_adapter};
 
 const BOARDS_IN_BUF: u64 = 1048*1048;
 const WORKGROUP_SIZE: u64 = 64;
@@ -31,10 +31,12 @@ async fn main() {
 
     println!("Start:\n{}", starter_board.get_board());
 
-    engine.set_input([convert(&starter_board.get_board())]).await;
+    engine.set_input([convert(&starter_board.get_board())], Side::White, 0).await;
 
     engine.run_pass(false);
+    engine.set_global_data(Side::Black, 1);
     engine.run_pass(false);
+    engine.set_global_data(Side::White, 2);
     engine.run_pass(true);
     let out = engine.get_output().await;
     println!("Found {} states", out.get_size());

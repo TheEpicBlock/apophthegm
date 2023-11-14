@@ -1,5 +1,11 @@
 struct Board {
-  pieces: array<u32, 8>
+  pieces: array<u32, 10>
+}
+
+struct GlobalData {
+  input_size: u32,
+  to_move: u32,
+  move_index: u32,
 }
 
 @group(0) @binding(0)
@@ -7,7 +13,7 @@ var<storage, read_write> input: array<Board>;
 @group(0) @binding(1)
 var<storage, read_write> output: array<Board>;
 @group(0) @binding(2)
-var<uniform> input_size: u32;
+var<uniform> globals: GlobalData;
 @group(0) @binding(3)
 var<storage, read_write> out_index: atomic<u32>;
 
@@ -27,14 +33,11 @@ fn expansion_pass(
   local_id : vec3u,
 ) {
   // Avoid accessing the buffer out of bounds
-  if (global_id.x >= input_size) {
+  if (global_id.x >= globals.input_size) {
     return;
   }
   var board = input[global_id.x];
-  var to_move = 0x8u;
-  if (input_size > 1u) {
-    to_move = 0u;
-  }
+  let to_move = globals.to_move;
 
   var pawn_start_rank = 6u; // 0-indexed!
   if (to_move == 0x8u) {

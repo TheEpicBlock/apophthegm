@@ -7,7 +7,7 @@ use log::info;
 use tokio::join;
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends, Buffer, BindGroup, ComputePipeline, BufferSlice, MapMode, Device, Queue, SubmissionIndex, BufferView, Adapter};
 
-use crate::chess::GpuBoard;
+use crate::chess::{GpuBoard, Side};
 use crate::wgpu_util::SliceExtension;
 
 const WORKGROUP_SIZE: u64 = 64;
@@ -21,7 +21,7 @@ pub struct GpuChessEvaluator {
     buffer_size: u64,
     in_buf: Buffer,
     out_buf: Buffer,
-    input_size: Buffer,
+    global_data: Buffer,
     just_zero: Buffer,
     out_index: Buffer,
     staging_buf: Buffer,
@@ -33,24 +33,31 @@ pub struct GpuChessEvaluator {
 
 impl GpuChessEvaluator {
     /// Can only be called just after creation
-    pub async fn set_input(&mut self, boards: impl IntoIterator<Item = GpuBoard>) {
+    pub async fn set_input(&mut self, boards: impl IntoIterator<Item = GpuBoard>, to_move: Side, move_num: u32) {
         // self.in_buf.slice(..).map_buffer(&self.device, wgpu::MapMode::Write).await.unwrap();
 
         let mut view = self.in_buf.slice(..).get_mapped_range_mut();
         let mut i = 0;
         boards.into_iter().for_each(|board| {
             let start_write = i * size_of::<GpuBoard>();
-            view[start_write..(start_write+32)].copy_from_slice(&board.to_bytes());
+            view[start_write..(start_write+size_of::<GpuBoard>())].copy_from_slice(&board.to_bytes());
             i += 1;
         });
         drop(view);
         self.in_buf.unmap();
 
-        // self.input_size.slice(..).map_buffer(&self.device, wgpu::MapMode::Write).await.unwrap();
-        let mut view = self.input_size.slice(..).get_mapped_range_mut();
-        view.copy_from_slice(bytemuck::bytes_of(&(i as u32)));
-        drop(view);
-        self.input_size.unmap();
+        let mut data = [0; 12];
+        data[0..4].copy_from_slice(bytemuck::bytes_of(&(i as u32)));
+        data[4..8].copy_from_slice(bytemuck::bytes_of(&to_move.gpu_representation()));
+        data[8..12].copy_from_slice(bytemuck::bytes_of(&move_num));
+        self.queue.write_buffer(&self.global_data, 0, &data);
+    }
+
+    pub fn set_global_data(&self, to_move: Side, move_num: u32) {
+        let mut data = [0; 8];
+        data[0..4].copy_from_slice(bytemuck::bytes_of(&to_move.gpu_representation()));
+        data[4..8].copy_from_slice(bytemuck::bytes_of(&move_num));
+        self.queue.write_buffer(&self.global_data, 4, &data);
     }
 
     pub fn run_pass(&mut self, read_out: bool) -> SubmissionIndex {
@@ -70,7 +77,7 @@ impl GpuChessEvaluator {
         command_encoder.copy_buffer_to_buffer(
             &self.out_index,
             0, // Source offset
-            &self.input_size,
+            &self.global_data,
             0, // Destination offset
             1 * size_of::<u32>() as u64,
         );
@@ -179,18 +186,18 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
         }
     );
 
-    let input_size = device.create_buffer(
+    let global_data = device.create_buffer(
         &BufferDescriptor { 
-            label: Some("Input Size Uniform"),
-            size: 1 * size_of::<u32>() as u64, 
+            label: Some("Global Data Uniform"),
+            size: 3 * size_of::<u32>() as u64, 
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST, 
-            mapped_at_creation: true
+            mapped_at_creation: false
         }
     );
 
     let just_zero = device.create_buffer(
         &BufferDescriptor { 
-            label: Some("Output Index Atomic"),
+            label: Some("Zero"),
             size: 1 * size_of::<u32>() as u64, 
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, 
             mapped_at_creation: false
@@ -286,7 +293,7 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::Buffer(input_size.as_entire_buffer_binding())
+                    resource: wgpu::BindingResource::Buffer(global_data.as_entire_buffer_binding())
                 },
                 BindGroupEntry {
                     binding: 3,
@@ -311,7 +318,7 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
         }
     );
 
-    return GpuChessEvaluator { device, queue, in_buf, out_buf, input_size, just_zero, out_index, staging_buf, out_index_staging, bind_layout: bind_group_layout, bind: bind_group, pipeline, boards_per_buf, buffer_size };
+    return GpuChessEvaluator { device, queue, in_buf, out_buf, global_data, just_zero, out_index, staging_buf, out_index_staging, bind_layout: bind_group_layout, bind: bind_group, pipeline, boards_per_buf, buffer_size };
 }
 
 pub async fn init_adapter() -> Adapter {
