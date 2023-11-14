@@ -11,5 +11,6 @@ bytemuck = "1.14.0"
 enum-map = "2.7.1"
 env_logger = "0.10.0"
 futures-channel = "0.3.29"
+log = "0.4.20"
 tokio = { version = "1.33.0", features = ["full"] }
 wgpu = "0.18.0"

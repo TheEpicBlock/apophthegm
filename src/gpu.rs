@@ -3,13 +3,14 @@ use std::iter::{Map, Take};
 use std::mem::size_of;
 use std::slice::Iter;
 
+use log::info;
 use tokio::join;
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends, Buffer, BindGroup, ComputePipeline, BufferSlice, MapMode, Device, Queue, SubmissionIndex, BufferView};
 
 use crate::chess::GpuBoard;
 use crate::wgpu_util::SliceExtension;
 
-const BOARDS_IN_BUF: u64 = 1048*1048;
+const BOARDS_IN_BUF: u64 = 1024*1024*2;
 const WORKGROUP_SIZE: u64 = 64;
 const BUFFER_SIZE: u64 = size_of::<GpuBoard>() as u64 * BOARDS_IN_BUF;
 
@@ -55,7 +56,7 @@ impl GpuChessEvaluator {
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.pipeline);
         pass_encoder.set_bind_group(0, &self.bind, &[]);
-        pass_encoder.dispatch_workgroups(1000, 1, 1);
+        pass_encoder.dispatch_workgroups((BOARDS_IN_BUF as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
         drop(pass_encoder);
         command_encoder.copy_buffer_to_buffer(
             &self.out_buf,
@@ -150,6 +151,9 @@ pub async fn init_gpu_evaluator() -> GpuChessEvaluator {
         force_fallback_adapter: false,
         compatible_surface: None,
     }).await.expect("WebGPU no does work :(");
+
+    info!("Using gpu adapter: {:?}", adapter);
+    info!("Buffers size: {BUFFER_SIZE} ({BOARDS_IN_BUF} boards)");
 
     let (device, queue) = adapter.request_device(&DeviceDescriptor::default(), None).await.expect("Failed to open GPU");
 

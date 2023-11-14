@@ -62,6 +62,7 @@ dependencies = [
  "enum-map",
  "env_logger",
  "futures-channel",
+ "log",
  "tokio",
  "wgpu",
 ]
