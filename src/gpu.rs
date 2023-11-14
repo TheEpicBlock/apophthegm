@@ -153,7 +153,11 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
     let max_dispatch = device.limits().max_compute_workgroups_per_dimension as u64;
     let max_boards_dispatch = max_dispatch * WORKGROUP_SIZE;
     info!("Max dispatch is {max_dispatch}, which fits {max_boards_dispatch} boards");
-    let boards_per_buf = u64::min(max_boards_per_buf, max_boards_dispatch);
+    let mut boards_per_buf = u64::min(max_boards_per_buf, max_boards_dispatch);
+    if cfg!(test) {
+        info!("Detected test-mode, downsizing buffers");
+        boards_per_buf = 128;
+    }
     let buffer_size = boards_per_buf * size_of::<GpuBoard>() as u64;
     info!("We're allocating buffers of size {buffer_size}, which fits {boards_per_buf} boards");
 
