@@ -307,7 +307,7 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
                 }
             )),
             module: &device.create_shader_module(include_wgsl!("shader.wgsl")),
-            entry_point: "main"
+            entry_point: "expansion_pass"
         }
     );
 

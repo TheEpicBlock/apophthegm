@@ -19,7 +19,7 @@ const Horsy = 5u;
 const Pawn = 6u;
 
 @compute @workgroup_size(64)
-fn main(
+fn expansion_pass(
   @builtin(global_invocation_id)
   global_id : vec3u,
 
