@@ -1,13 +1,3 @@
-struct Board {
-  pieces: array<u32, 10>
-}
-
-struct GlobalData {
-  input_size: u32,
-  to_move: u32,
-  move_index: u32,
-}
-
 @group(0) @binding(0)
 var<storage, read_write> input: array<Board>;
 @group(0) @binding(1)
@@ -16,13 +6,6 @@ var<storage, read_write> output: array<Board>;
 var<storage, read_write> out_index: atomic<u32>;
 @group(0) @binding(2)
 var<uniform> globals: GlobalData;
-
-const King = 1u;
-const Queen = 2u;
-const Bishop = 3u;
-const Rook = 4u;
-const Horsy = 5u;
-const Pawn = 6u;
 
 @compute @workgroup_size(64)
 fn expansion_pass(
@@ -187,10 +170,6 @@ fn pawn_move(board: ptr<function, Board>, x: u32, y: u32, xNew: u32, yNew: u32, 
   }
 }
 
-fn getPiece(board: ptr<function, Board>, x: u32, y: u32) -> u32 {
-  return ((*board).pieces[y] >> (x * 4u)) & 0xFu;
-}
-
 fn isColour(board: ptr<function, Board>, colour: u32, x: u32, y: u32) -> bool {
   let p = getPiece(board, x, y);
   return p != 0u && ((p & 0x8u) == colour);
@@ -234,33 +213,4 @@ fn setMove(board: ptr<function, Board>, x: u32, y: u32, xNew: u32, yNew: u32, sp
       // I trust this doesn't happen, for I'm an ostrich
     }
   } 
-}
-
-fn evalPosition(board: ptr<function, Board>) -> f32 {
-  var eval_score = f32(0);
-  for (var x = 0u; x < 8u; x++) {
-    for (var y = 0u; y < 8u; y++) {
-      // Pieces are nibbles
-      let piece = getPiece(board, x, y);
-      var piece_score = 1.0;
-      let piece_type = piece & 0x7u;
-      if (piece_type == Pawn) {
-        piece_score = 1.0;
-      } else if (piece_type == Horsy || piece_type == Bishop) {
-        piece_score = 3.0;
-      } else if (piece_type == Rook) {
-        piece_score = 5.0;
-      } else if (piece_type == Queen) {
-        piece_score = 9.0;
-      } else if (piece_type == King) {
-        piece_score = 9999.0;
-      }
-      if ((piece & 0x8u) == 0u) {
-        // Piece is black
-        piece_score *= 01.0;
-      }
-      eval_score += piece_score;
-    }
-  }
-  return eval_score;
 }

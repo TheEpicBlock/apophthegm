@@ -9,6 +9,7 @@
 mod chess;
 mod gpu;
 pub(crate) mod wgpu_util;
+mod shaders;
 
 use core::slice::SlicePattern;
 use std::{mem::size_of, thread, time::Duration};
@@ -36,10 +37,10 @@ async fn main() {
     let combo_2 = engine.create_combo(1, 2);
 
     engine.set_input(&combo_1, [convert(&starter_board.get_board())], Side::White, 0).await;
-    engine.run_pass(&combo_1);
+    engine.run_expansion(&combo_1);
 
     engine.set_global_data(Side::Black, 1);
-    engine.run_pass(&combo_2);
+    engine.run_expansion(&combo_2);
 
     let out = engine.get_output(&combo_2).await;
     println!("Found {} states", out.get_size());

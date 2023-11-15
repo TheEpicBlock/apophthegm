@@ -9,6 +9,7 @@ use tokio::join;
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends, Buffer, BindGroup, ComputePipeline, BufferSlice, MapMode, Device, Queue, SubmissionIndex, BufferView, Adapter};
 
 use crate::chess::{GpuBoard, Side};
+use crate::shaders::{Shader, self};
 use crate::wgpu_util::SliceExtension;
 
 const WORKGROUP_SIZE: u64 = 64;
@@ -21,8 +22,7 @@ pub struct GpuChessEvaluator {
     just_zero: Buffer,
     out_index: Buffer,
     out_index_staging: Buffer,
-    bind_layout: BindGroupLayout,
-    pipeline: ComputePipeline
+    expand_shader: Shader
 }
 
 impl GpuChessEvaluator {
@@ -53,10 +53,10 @@ impl GpuChessEvaluator {
         self.queue.write_buffer(&self.global_data, 4, &data);
     }
 
-    pub fn run_pass(&mut self, combo: &BufferCombo) -> SubmissionIndex {
+    pub fn run_expansion(&mut self, combo: &BufferCombo) -> SubmissionIndex {
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
-        pass_encoder.set_pipeline(&self.pipeline);
+        pass_encoder.set_pipeline(&self.expand_shader.1);
         pass_encoder.set_bind_group(0, &combo.bind, &[]);
         pass_encoder.dispatch_workgroups((self.buffers.boards_per_buf as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
         drop(pass_encoder);
@@ -180,72 +180,11 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
         }
     );
 
-    let bind_group_layout = device.create_bind_group_layout(
-        &BindGroupLayoutDescriptor {
-            label: None,
-            entries: &[
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None
-                    },
-                    count: None,
-                },
-            ],
-        }
-    );
-
-    let pipeline = device.create_compute_pipeline(
-        &wgpu::ComputePipelineDescriptor {
-            label: None,
-            layout: Some(&device.create_pipeline_layout(
-                &PipelineLayoutDescriptor {
-                    label: None,
-                    bind_group_layouts: &[&bind_group_layout],
-                    push_constant_ranges: &[]
-                }
-            )),
-            module: &device.create_shader_module(include_wgsl!("shader.wgsl")),
-            entry_point: "expansion_pass"
-        }
-    );
-
     let buffers = BoardLists::init(&device);
 
-    return GpuChessEvaluator { device, buffers, queue, global_data, just_zero, out_index, out_index_staging, bind_layout: bind_group_layout, pipeline };
+    let expand_shader = shaders::expand_pipeline(&device);
+
+    return GpuChessEvaluator { device, buffers, queue, global_data, just_zero, out_index, out_index_staging, expand_shader };
 }
 
 pub async fn init_adapter() -> Adapter {
@@ -317,7 +256,7 @@ impl BoardLists {
         let bind_group = engine.device.create_bind_group(
             &BindGroupDescriptor {
                 label: None,
-                layout: &engine.bind_layout,
+                layout: &engine.expand_shader.0,
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
