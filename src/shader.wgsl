@@ -211,7 +211,8 @@ fn movePiece(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32,
 }
 
 fn setMove(board: ptr<function, Board>, x: u32, y: u32, xNew: u32, yNew: u32, special: u32) {
-  let move_u16 = (special << 12u) | (x << 9u) | (y << 6u) | (xNew << 3u) | (yNew << 0u);
+  // msssxxxy yyXXXYYY
+  let move_u16 = (globals.to_move << 12u) | (special << 12u) | (x << 9u) | (y << 6u) | (xNew << 3u) | (yNew << 0u);
   switch globals.move_index {
     case 0u: {
       (*board).pieces[8] &= ~(0xFFu);
