@@ -177,7 +177,7 @@ impl GpuChessEvaluator {
             buf: &self.buffers.eval_staging,
             func: |b: &[u8; 4]| {
                 let num = u32::from_le_bytes(*b);
-                return num as f32 / 16777216.0;
+                return num as f32 / 1048576.0;
             }};
     }
 

@@ -49,11 +49,11 @@ async fn main() {
     engine.run_eval_contract(&pass_2, Side::White, 1).await;
     // engine.run_contract(&pass_2, Side::Black, 1).await;
 
-    let bout = engine.get_output_boards(&pass_2).await;
+    let bout = engine.get_output_boards(&pass_1).await;
     let eout = engine.get_output_evals(&pass_2).await;
     println!("Found {} states", bout.get_size());
     for (b, e) in Iterator::zip(bout.iter(), eout.iter()) {
-        println!("{e}");
+        println!("{b}=={e}\n");
     }
 
     drop(bout);
