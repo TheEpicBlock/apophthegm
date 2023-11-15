@@ -45,8 +45,14 @@ impl IndexMut<Location> for StandardBoard {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct GpuBoard([u8; 10*size_of::<u32>()]);
+
+impl PartialEq<Self> for GpuBoard {
+    fn eq(&self, other: &Self) -> bool {
+        self.0[0..(8*4)] == other.0[0..(8*4)]
+    }
+}
 
 impl Board for GpuBoard {
     fn new_empty() -> Self {
