@@ -72,17 +72,17 @@ impl Move {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct EvalScore(FloatOrd<f32>);
+pub struct EvalScore(i32);
 
 impl EvalScore {
-    pub fn from(i: f32) -> Self {
-        return Self(FloatOrd(i));
+    pub fn from(i: i32) -> Self {
+        return Self(i);
     }
 
     pub fn worst(side: Side) -> Self {
         match side {
-            Side::White => Self::from(-f32::INFINITY),
-            Side::Black => Self::from(f32::INFINITY),
+            Side::White => Self::from(i32::MIN),
+            Side::Black => Self::from(i32::MAX),
         }
     }
 
@@ -94,7 +94,7 @@ impl EvalScore {
         }
     }
 
-    pub fn to_centipawn(&self) -> u32 {
-        return (self.0.0 * 100.) as u32;
+    pub fn to_centipawn(&self) -> i64 {
+        return (self.0) as i64;
     }
 }

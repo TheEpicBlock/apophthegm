@@ -91,13 +91,13 @@ pub struct UciCommunication{
 }
 
 impl UciCommunication {
-    pub fn set_best(&self, m: Move, score: u32) {
+    pub fn set_best(&self, m: Move, score: i64) {
         if self.is_stopped() {
             return;
         }
         *self.best.lock().unwrap() = Some(m);
         println!("info pv {}", m);
-        println!("info score cp {}", score as u32);
+        println!("info score cp {}", score);
     }
 
     pub fn stop(&self) {

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::iter::{Map, Take};
 use std::marker::PhantomData;
 use std::mem::size_of;
+use std::num::NonZeroU64;
 use std::rc::Rc;
 use std::slice::Iter;
 
@@ -112,6 +113,7 @@ impl GpuChessEvaluator {
         self.set_all_global_data(input_size, to_move, move_num);
 
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
+        command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.input as usize], 0, None);
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.eval_contract_shader.1);
         pass_encoder.set_bind_group(0, &combo.eval_contract_bind, &[]);
@@ -127,6 +129,7 @@ impl GpuChessEvaluator {
         self.set_all_global_data(input_size, to_move, move_num);
 
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
+        command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.input as usize], 0, None);
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.contract_shader.1);
         pass_encoder.set_bind_group(0, &combo.contract_bind, &[]);
@@ -175,9 +178,9 @@ impl GpuChessEvaluator {
             buf_view: Some(staging_view),
             amount: amount as usize,
             buf: &self.buffers.eval_staging,
-            func: |b: &[u8; 4]| {
-                let num = i32::from_le_bytes(*b);
-                return EvalScore::from(num as f32 / 1048576.0);
+            func: |b: &[u8; size_of::<u32>()]| {
+                let num = (u32::from_le_bytes(*b) as i64) - 1073741824;
+                return EvalScore::from(num as i32);
             }};
     }
 

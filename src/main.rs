@@ -56,7 +56,7 @@ impl ThreadedEngine for MahEngine {
                 engine.run_expansion(&pass_1).await;
 
                 let first_boards = engine.get_output_boards(&pass_1).await.iter().collect::<Vec<_>>();
-                let best_score = EvalScore::worst(start_side);
+                let mut best_score = EvalScore::worst(start_side);
                 for b in first_boards {
                     engine.set_input(&pass_1, [b], start_side.opposite(), 0).await;
                     engine.run_expansion(&pass_1).await;
@@ -78,6 +78,7 @@ impl ThreadedEngine for MahEngine {
                     let (_best_board, score) = Iterator::zip(bout.iter(), eout.iter()).max_by(|a, b| EvalScore::better(&a.1, &b.1, start_side.opposite())).unwrap();
                     if EvalScore::better(&score, &best_score, start_side).is_gt() {
                         let best_move = board::find_move(&state.get_board(), &b).unwrap();
+                        best_score = score;
                         coms.set_best(best_move, score.to_centipawn());
                     }
                 }

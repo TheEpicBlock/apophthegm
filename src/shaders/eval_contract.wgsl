@@ -3,7 +3,7 @@ var<uniform> globals: GlobalData;
 @group(0) @binding(1)
 var<storage, read> child_boards: array<Board>;
 @group(0) @binding(2)
-var<storage, read_write> parent_evals: array<atomic<i32>>;
+var<storage, read_write> parent_evals: array<atomic<u32>>;
 
 @compute @workgroup_size(64)
 fn eval_contract_pass(
@@ -18,54 +18,53 @@ fn eval_contract_pass(
     return;
   }
   var board = child_boards[global_id.x];
-  let score = evalPosition(&board);
-  let fp_score = i32(score * 16777216.);
+  let score = u32(evalPosition(&board) + 1073741824);
   let prev_index = getPrev(&board, globals.move_index);
 
   switch globals.to_move {
     case 0x8u: {
-      atomicMax(&parent_evals[prev_index], fp_score);
+      atomicMax(&parent_evals[prev_index], score);
     }
     case 0x0u: {
-      atomicMin(&parent_evals[prev_index], fp_score);
+      atomicMin(&parent_evals[prev_index], score);
     }
     default: {}
   }
 }
 
-fn evalPosition(board: ptr<function, Board>) -> f32 {
-  var eval_score = f32(0);
+fn evalPosition(board: ptr<function, Board>) -> i32 {
+  var eval_score = i32(0);
 
   for (var x = 0u; x < 8u; x++) {
     for (var y = 0u; y < 8u; y++) {
       // Pieces are nibbles
       let piece = getPiece(board, x, y);
-      var piece_score = 1.0;
+      var piece_score = i32(0);
       let piece_type = piece & 0x7u;
       if (piece_type == Pawn) {
-        piece_score = 1.0;
+        piece_score = 1;
         if (y == 3u || y == 4u) {
-          piece_score = 1.5;
+          piece_score = 100;
         }
         if (y == 2u || y == 5u) {
-          piece_score = 1.2;
+          piece_score = 120;
         }
         if (x == 3u || x == 4u) {
-          piece_score *= 1.5;
+          piece_score += 10;
         }
       } else if (piece_type == Horsy || piece_type == Bishop) {
-        piece_score = 3.0;
+        piece_score = 300;
       } else if (piece_type == Rook) {
-        piece_score = 5.0;
+        piece_score = 500;
       } else if (piece_type == Queen) {
-        piece_score = 9.0;
+        piece_score = 900;
       } else if (piece_type == King) {
-        piece_score = 9999.0;
+        piece_score = 100000;
       }
       
       if ((piece & 0x8u) == 0u) {
         // Piece is black
-        piece_score *= -1.0;
+        piece_score *= -1;
       }
       eval_score += piece_score;
     }
