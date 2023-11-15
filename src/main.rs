@@ -2,14 +2,16 @@
 #![feature(ascii_char_variants)]
 #![feature(slice_as_chunks)]
 #![feature(slice_pattern)]
+#![feature(impl_trait_in_assoc_type)]
+#![feature(never_type)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
-#![feature(impl_trait_in_assoc_type)]
 
 mod chess;
 mod gpu;
 pub(crate) mod wgpu_util;
 mod shaders;
+mod uci;
 
 use core::slice::SlicePattern;
 use std::{mem::size_of, thread, time::Duration};

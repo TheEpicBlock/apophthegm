@@ -2,7 +2,7 @@
 use enum_map::{EnumMap, enum_map};
 use crate::chess::board::Board;
 
-use super::{Location, board::StandardBoard, Piece, Side};
+use super::{Location, board::StandardBoard, Piece, Side, Move};
 
 pub struct GameState {
     pieces: StandardBoard,
@@ -93,6 +93,12 @@ impl GameState {
 
     pub fn get_board(&self) -> impl Board {
         self.pieces
+    }
+
+    pub fn play(&mut self, movee: Move) {
+        let prev = self.get(movee.0);
+        self.set(movee.0, None);
+        self.set(movee.1, prev);
     }
 }
 

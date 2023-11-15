@@ -59,3 +59,12 @@ impl Display for Move {
         write!(f, "{}{}", self.0, self.1)
     }
 }
+
+impl Move {
+    // Parses long algebraic notation, compliant with uci
+    pub fn from_str(str: &str) -> Move {
+        assert_eq!(str.len(), 4);
+        let str: Vec<_> = str.chars().collect();
+        return Move(Location::from_letters(str[0], str[1]), Location::from_letters(str[2], str[3]));
+    }
+}
