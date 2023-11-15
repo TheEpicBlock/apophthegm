@@ -32,13 +32,12 @@ pub fn start_loop(engine: impl ThreadedEngine) -> ! {
                 let Some(pos_type) = cmd.next() else { panic!("Invalid position command") };
                 let fen;
                 if pos_type == "startpos" {
-                    fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+                    fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".to_owned();
                 } else {
-                    let Some(f) = cmd.next() else { panic!("Invalid position command") };
-                    fen = f;
+                    fen = cmd.by_ref().take(6).collect::<Vec<_>>().join(" ");
                 }
 
-                let mut state = GameState::from_fen(fen);
+                let mut state = GameState::from_fen(&fen);
 
                 if matches!(cmd.next(), Some("moves")) {
                     for move_str in cmd {
