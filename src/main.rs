@@ -16,6 +16,7 @@ mod uci;
 use core::slice::SlicePattern;
 use std::{mem::size_of, thread, time::Duration, rc::Rc, sync::Arc};
 
+use chess::EvalScore;
 use float_ord::FloatOrd;
 use gpu::{init_gpu_evaluator, GpuChessEvaluator};
 use tokio::runtime::Handle;
@@ -54,23 +55,32 @@ impl ThreadedEngine for MahEngine {
                 engine.set_input(&pass_1, [convert(&state.get_board())], start_side, 0).await;
                 engine.run_expansion(&pass_1).await;
 
-                let pass_2 = engine.create_combo(1, 2);
-                engine.set_global_data(start_side.opposite(), 1);
-                engine.run_expansion(&pass_2).await;
+                let first_boards = engine.get_output_boards(&pass_1).await.iter().collect::<Vec<_>>();
+                let best_score = EvalScore::worst(start_side);
+                for b in first_boards {
+                    engine.set_input(&pass_1, [b], start_side.opposite(), 0).await;
+                    engine.run_expansion(&pass_1).await;
 
-
-                // let pass_3 = engine.create_combo(2, 3);
-                // engine.set_global_data(start_side, 2);
-                // engine.run_expansion(&pass_3).await;
-
-                engine.run_eval_contract(&pass_2, start_side, 1).await;
-                // engine.run_contract(&pass_2, start_side.opposite(), 1).await;
-
-                let bout = engine.get_output_boards(&pass_1).await;
-                let eout = engine.get_output_evals(&pass_2).await;
-                let (best_board, score) = Iterator::zip(bout.iter(), eout.iter().map(|f| FloatOrd(f))).max_by_key(|b| b.1).unwrap();
-                let best_move = board::find_move(&state.get_board(), &best_board).unwrap();
-                coms.set_best(best_move, score.0);
+                    let pass_2 = engine.create_combo(1, 2);
+                    engine.set_global_data(start_side, 1);
+                    engine.run_expansion(&pass_2).await;
+    
+    
+                    // let pass_3 = engine.create_combo(2, 3);
+                    // engine.set_global_data(start_side, 2);
+                    // engine.run_expansion(&pass_3).await;
+    
+                    engine.run_eval_contract(&pass_2, start_side, 1).await;
+                    // engine.run_contract(&pass_2, start_side.opposite(), 1).await;
+    
+                    let bout = engine.get_output_boards(&pass_1).await;
+                    let eout = engine.get_output_evals(&pass_2).await;
+                    let (_best_board, score) = Iterator::zip(bout.iter(), eout.iter()).max_by(|a, b| EvalScore::better(&a.1, &b.1, start_side.opposite())).unwrap();
+                    if EvalScore::better(&score, &best_score, start_side).is_gt() {
+                        let best_move = board::find_move(&state.get_board(), &b).unwrap();
+                        coms.set_best(best_move, score.to_centipawn());
+                    }
+                }
                 coms.stop();
             }
         }});

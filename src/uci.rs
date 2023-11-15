@@ -91,7 +91,7 @@ pub struct UciCommunication{
 }
 
 impl UciCommunication {
-    pub fn set_best(&self, m: Move, score: f32) {
+    pub fn set_best(&self, m: Move, score: u32) {
         if self.is_stopped() {
             return;
         }

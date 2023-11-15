@@ -106,7 +106,7 @@ pub fn convert<T: Board>(input: &impl Board) -> T {
     return out;
 }
 
-pub fn find_move(before: &impl Board, after: &impl Board) -> Result<Move, ()> {
+pub fn find_move(before: &impl Board, after: &impl Board) -> Result<Move, &'static str> {
     let mut start_pos = None;
     for pos in Location::all() {
         if before.get(pos).is_some() && after.get(pos).is_none() {
@@ -114,7 +114,7 @@ pub fn find_move(before: &impl Board, after: &impl Board) -> Result<Move, ()> {
             break;
         }
     }
-    let Some(start_pos) = start_pos else { return Err(()); };
+    let Some(start_pos) = start_pos else { return Err("Couldn't find start"); };
 
     let mut end_pos = None;
     for pos in Location::all() {
@@ -125,7 +125,7 @@ pub fn find_move(before: &impl Board, after: &impl Board) -> Result<Move, ()> {
             }
         }
     }
-    let Some(end_pos) = end_pos else { return Err(()); };
+    let Some(end_pos) = end_pos else { return Err("Couldn't find end"); };
 
     return Ok(Move(start_pos, end_pos));
 }

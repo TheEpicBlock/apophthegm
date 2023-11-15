@@ -4,10 +4,11 @@ pub mod piece;
 #[cfg(test)]
 pub mod test;
 
-use std::fmt::Display;
+use std::{fmt::Display, cmp::Ordering};
 use std::ascii;
 
 use ::ascii::ToAsciiChar;
+use float_ord::FloatOrd;
 pub use state::GameState;
 pub use piece::{Piece, PieceType, Side};
 pub use board::{Board, GpuBoard, StandardBoard};
@@ -67,5 +68,33 @@ impl Move {
         assert_eq!(str.len(), 4);
         let str: Vec<_> = str.chars().collect();
         return Move(Location::from_letters(str[0], str[1]), Location::from_letters(str[2], str[3]));
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct EvalScore(FloatOrd<f32>);
+
+impl EvalScore {
+    pub fn from(i: f32) -> Self {
+        return Self(FloatOrd(i));
+    }
+
+    pub fn worst(side: Side) -> Self {
+        match side {
+            Side::White => Self::from(-f32::INFINITY),
+            Side::Black => Self::from(f32::INFINITY),
+        }
+    }
+
+    pub fn better(a: &Self, b: &Self, side: Side) -> Ordering {
+        let ord = Ord::cmp(&a.0, &b.0);
+        match side {
+            Side::White => ord,
+            Side::Black => ord.reverse(),
+        }
+    }
+
+    pub fn to_centipawn(&self) -> u32 {
+        return (self.0.0 * 100.) as u32;
     }
 }

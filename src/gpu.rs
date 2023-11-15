@@ -10,7 +10,7 @@ use log::info;
 use tokio::join;
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends, Buffer, BindGroup, ComputePipeline, BufferSlice, MapMode, Device, Queue, SubmissionIndex, BufferView, Adapter};
 
-use crate::chess::{GpuBoard, Side};
+use crate::chess::{GpuBoard, Side, EvalScore};
 use crate::shaders::{Shader, self};
 use crate::wgpu_util::SliceExtension;
 
@@ -155,7 +155,7 @@ impl GpuChessEvaluator {
         return SelfClosingBufferView{ buf_view: Some(staging_view), amount: amount as usize, buf: &self.buffers.staging(), func: |b: &[u8; size_of::<GpuBoard>()]| GpuBoard::from_bytes(*b)};
     }
 
-    pub async fn get_output_evals<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<4, impl (Fn(&[u8; 4]) -> f32)> {
+    pub async fn get_output_evals<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<4, impl (Fn(&[u8; 4]) -> EvalScore)> {
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         command_encoder.copy_buffer_to_buffer(
             &self.buffers.eval_buffers[combo.input as usize],
@@ -177,7 +177,7 @@ impl GpuChessEvaluator {
             buf: &self.buffers.eval_staging,
             func: |b: &[u8; 4]| {
                 let num = i32::from_le_bytes(*b);
-                return num as f32 / 1048576.0;
+                return EvalScore::from(num as f32 / 1048576.0);
             }};
     }
 
