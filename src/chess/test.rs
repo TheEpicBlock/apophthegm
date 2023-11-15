@@ -27,7 +27,7 @@ impl TestEngine for GpuTester {
         let buf_combo = engine.create_combo(0, 1);
         engine.set_input(&buf_combo, [convert(&board_in.get_board())], super::Side::White, 0).await;
         engine.run_expansion(&buf_combo).await;
-        let out = engine.get_output(&buf_combo).await;
+        let out = engine.get_output_boards(&buf_combo).await;
         out.iter().collect()
     }
 }

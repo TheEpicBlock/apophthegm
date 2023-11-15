@@ -1,6 +1,7 @@
 use core::slice::SlicePattern;
 use std::collections::HashMap;
 use std::iter::{Map, Take};
+use std::marker::PhantomData;
 use std::mem::size_of;
 use std::rc::Rc;
 use std::slice::Iter;
@@ -129,7 +130,7 @@ impl GpuChessEvaluator {
         self.queue.submit([command_encoder.finish()]);
     }
 
-    pub async fn get_output<'a>(&'a self, combo: &BufferCombo) -> ChessOutputBufferView {
+    pub async fn get_output_boards<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<GpuBoard> {
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         command_encoder.copy_buffer_to_buffer(
             &self.buffers.get_out(combo),
@@ -145,7 +146,26 @@ impl GpuChessEvaluator {
         let staging_view = self.buffers.staging().slice(..).get_mapped_range();
 
         let amount = self.buffers.buffer_sizes[combo.output as usize];
-        return ChessOutputBufferView{ buf_view: Some(staging_view), amount: amount as usize, buf: &self.buffers.staging()};
+        return SelfClosingBufferView{ buf_view: Some(staging_view), amount: amount as usize, buf: &self.buffers.staging(), phantom: PhantomData::default()};
+    }
+
+    pub async fn get_output_evals<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<u32> {
+        let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
+        command_encoder.copy_buffer_to_buffer(
+            &self.buffers.eval_buffers[combo.input as usize],
+            0, // Source offset
+            &self.buffers.eval_staging,
+            0, // Destination offset
+            self.buffers.boards_per_buf * size_of::<u32>() as u64,
+        );
+        self.queue.submit([command_encoder.finish()]);
+
+        self.buffers.eval_staging.slice(..).map_buffer(&self.device, wgpu::MapMode::Read).await.unwrap();
+        
+        let staging_view = self.buffers.eval_staging.slice(..).get_mapped_range();
+
+        let amount = self.buffers.buffer_sizes[combo.input as usize];
+        return SelfClosingBufferView{ buf_view: Some(staging_view), amount: amount as usize, buf: &self.buffers.eval_staging, phantom: PhantomData::default()};
     }
 
     pub fn create_combo(&self, input: u8, output: u8) -> BufferCombo {
@@ -153,13 +173,14 @@ impl GpuChessEvaluator {
     }
 }
 
-pub struct ChessOutputBufferView<'a> {
+pub struct SelfClosingBufferView<'a, T> {
     buf_view: Option<BufferView<'a>>,
     amount: usize,
-    buf: &'a Buffer
+    buf: &'a Buffer,
+    phantom: PhantomData<T>
 }
 
-impl ChessOutputBufferView<'_> {
+impl SelfClosingBufferView<'_, GpuBoard> {
     pub fn get_size(&self) -> usize {
         return self.amount;
     }
@@ -172,7 +193,20 @@ impl ChessOutputBufferView<'_> {
     }
 }
 
-impl Drop for ChessOutputBufferView<'_> {
+impl SelfClosingBufferView<'_, u32> {
+    pub fn get_size(&self) -> usize {
+        return self.amount;
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
+        // Safety: buf_view is always Some at this point
+        let chunks = self.buf_view.as_ref().unwrap().as_chunks::<{size_of::<u32>()}>().0;
+        let iter = chunks.iter().take(self.amount).map(|b| u32::from_le_bytes(*b));
+        return iter;
+    }
+}
+
+impl <T> Drop for SelfClosingBufferView<'_, T> {
     fn drop(&mut self) {
         let view = self.buf_view.take();
         drop(view);
@@ -249,6 +283,7 @@ pub struct BoardLists {
     board_buffers: [Buffer; 4],
     buffer_sizes: [u32; 4],
     eval_buffers: [Buffer; 4],
+    eval_staging: Buffer,
     staging: Buffer,
     /// The amount of boards per buffer (for buffers that contain boards)
     boards_per_buf: u64,
@@ -289,7 +324,7 @@ impl BoardLists {
             device.create_buffer(
                 &BufferDescriptor { 
                     label: Some(&format!("Eval Storage Buf #{i}")),
-                    size: boards_per_buf * size_of::<f32>() as u64, 
+                    size: boards_per_buf * size_of::<u32>() as u64, 
                     usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC, 
                     mapped_at_creation: false
                 }
@@ -305,7 +340,16 @@ impl BoardLists {
             }
         );
 
-        return Self {board_buffers, boards_per_buf, eval_buffers, buffer_size, staging, combo_cache: HashMap::default(), buffer_sizes: [0; 4]};
+        let eval_staging = device.create_buffer(
+            &BufferDescriptor { 
+                label: Some(&format!("Eval Staging")),
+                size: buffer_size, 
+                usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST, 
+                mapped_at_creation: false
+            }
+        );
+
+        return Self {board_buffers, boards_per_buf, eval_buffers, buffer_size, staging, eval_staging, combo_cache: HashMap::default(), buffer_sizes: [0; 4]};
     }
 
     pub fn create_combo(&self, input: u8, output: u8, engine: &GpuChessEvaluator) -> BufferCombo {

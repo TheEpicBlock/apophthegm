@@ -49,12 +49,17 @@ async fn main() {
     engine.run_eval_contract(&pass_3, Side::White, 2).await;
     engine.run_contract(&pass_2, Side::Black, 1).await;
 
-    let out = engine.get_output(&pass_3).await;
+    let out = engine.get_output_boards(&pass_3).await;
     println!("Found {} states", out.get_size());
     // out.iter().for_each(|b| {
     //     println!("{b}");
     // });
     drop(out);
+
+    let out = engine.get_output_evals(&pass_2).await;
+    out.iter().for_each(|e| {
+        println!("{e}");
+    });
 }
 
 #[cfg(test)]
