@@ -33,16 +33,23 @@ async fn main() {
 
     println!("Start:\n{}", starter_board.get_board());
 
-    let combo_1 = engine.create_combo(0, 1);
-    let combo_2 = engine.create_combo(1, 2);
+    let pass_1 = engine.create_combo(0, 1);
+    engine.set_input(&pass_1, [convert(&starter_board.get_board())], Side::White, 0).await;
+    engine.run_expansion(&pass_1).await;
 
-    engine.set_input(&combo_1, [convert(&starter_board.get_board())], Side::White, 0).await;
-    engine.run_expansion(&combo_1).await;
-
+    let pass_2 = engine.create_combo(1, 2);
     engine.set_global_data(Side::Black, 1);
-    engine.run_expansion(&combo_2).await;
+    engine.run_expansion(&pass_2).await;
 
-    let out = engine.get_output(&combo_2).await;
+
+    let pass_3 = engine.create_combo(2, 3);
+    engine.set_global_data(Side::White, 2);
+    engine.run_expansion(&pass_3).await;
+
+    engine.run_eval_contract(&pass_3, Side::White, 2).await;
+    engine.run_contract(&pass_2, Side::Black, 1).await;
+
+    let out = engine.get_output(&pass_3).await;
     println!("Found {} states", out.get_size());
     // out.iter().for_each(|b| {
     //     println!("{b}");

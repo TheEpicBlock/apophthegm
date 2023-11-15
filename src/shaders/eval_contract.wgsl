@@ -1,20 +1,12 @@
-struct GlobalData {
-  input_size: u32,
-  to_move: u32,
-  move_index: u32,
-}
-
 @group(0) @binding(0)
 var<uniform> globals: GlobalData;
 @group(0) @binding(1)
-var<storage, read_write> self_boards: array<Board>;
+var<storage, read> self_boards: array<Board>;
 @group(0) @binding(2)
 var<storage, read_write> out: array<atomic<u32>>;
 
-const hashmap_capacity = 256u;
-
 @compute @workgroup_size(64)
-fn compute_eval_pass(
+fn eval_contract_pass(
   @builtin(global_invocation_id)
   global_id : vec3u,
 
@@ -25,36 +17,20 @@ fn compute_eval_pass(
   if (global_id.x >= globals.input_size) {
     return;
   }
-  var board = input[global_id.x];
-  let score = evalPosition(board);
-  let move = getMove(&board, globals.to_move);
-  let prev_move = getMove(&board, globals.to_move-1);
+  var board = self_boards[global_id.x];
+  let score = evalPosition(&board);
+  let fp_score = u32(score * 16777216.);
+  let prev_index = getPrev(&board, globals.move_index);
 
-  let board_hash = 0u;
-  let i = board_hash % hashmap_capacity;
-  loop {
-    let old_
+  switch globals.to_move {
+    case 0x8u: {
+      atomicMax(&out[prev_index], fp_score);
+    }
+    case 0x0u: {
+      atomicMin(&out[prev_index], fp_score);
+    }
+    default: {}
   }
-}
-
-fn getMove(board: ptr<function, Board>, index: u32) -> u32 {
-  switch index {
-    case 0u: {
-      return (*board).pieces[8] & (0xFFu);
-    }
-    case 1u: {
-      return ((*board).pieces[8] & (0xFFu << 16u)) >> 16u;
-    }
-    case 2u: {
-      return (*board).pieces[9] & (0xFFu);
-    }
-    case 3u: {
-      return ((*board).pieces[9] & (0xFFu << 16u)) >> 16u;
-    }
-    default: {
-      return 0u;
-    }
-  } 
 }
 
 fn evalPosition(board: ptr<function, Board>) -> f32 {

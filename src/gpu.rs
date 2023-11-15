@@ -23,7 +23,9 @@ pub struct GpuChessEvaluator {
     just_zero: Buffer,
     out_index: Buffer,
     out_index_staging: Buffer,
-    expand_shader: Shader
+    expand_shader: Shader,
+    eval_contract_shader: Shader,
+    contract_shader: Shader,
 }
 
 impl GpuChessEvaluator {
@@ -46,6 +48,15 @@ impl GpuChessEvaluator {
         self.queue.write_buffer(&self.global_data, 0, &data);
     }
 
+    pub fn set_all_global_data(&self, input_size: u32, to_move: Side, move_num: u32) {
+        assert!(move_num < 4);
+        let mut data = [0; 12];
+        data[0..4].copy_from_slice(bytemuck::bytes_of(&(input_size as u32)));
+        data[4..8].copy_from_slice(bytemuck::bytes_of(&to_move.gpu_representation()));
+        data[8..12].copy_from_slice(bytemuck::bytes_of(&move_num));
+        self.queue.write_buffer(&self.global_data, 0, &data);
+    }
+
     pub fn set_global_data(&self, to_move: Side, move_num: u32) {
         assert!(move_num < 4);
         let mut data = [0; 8];
@@ -58,7 +69,7 @@ impl GpuChessEvaluator {
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.expand_shader.1);
-        pass_encoder.set_bind_group(0, &combo.bind, &[]);
+        pass_encoder.set_bind_group(0, &combo.expansion_bind, &[]);
         pass_encoder.dispatch_workgroups((self.buffers.boards_per_buf as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
         drop(pass_encoder);
         command_encoder.copy_buffer_to_buffer(
@@ -90,6 +101,32 @@ impl GpuChessEvaluator {
         self.buffers.buffer_sizes[combo.output as usize] = output_size;
         drop(out_index_view);
         self.out_index_staging.unmap();
+    }
+
+    pub async fn run_eval_contract(&mut self, combo: &BufferCombo, to_move: Side, move_num: u32) {
+        let input_size = self.buffers.buffer_sizes[combo.output as usize];
+        self.set_all_global_data(input_size, to_move, move_num);
+
+        let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
+        let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
+        pass_encoder.set_pipeline(&self.eval_contract_shader.1);
+        pass_encoder.set_bind_group(0, &combo.eval_contract_bind, &[]);
+        pass_encoder.dispatch_workgroups((input_size as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
+        drop(pass_encoder);
+        self.queue.submit([command_encoder.finish()]);
+    }
+
+    pub async fn run_contract(&mut self, combo: &BufferCombo, to_move: Side, move_num: u32) {
+        let input_size = self.buffers.buffer_sizes[combo.output as usize];
+        self.set_all_global_data(input_size, to_move, move_num);
+
+        let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
+        let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
+        pass_encoder.set_pipeline(&self.contract_shader.1);
+        pass_encoder.set_bind_group(0, &combo.contract_bind, &[]);
+        pass_encoder.dispatch_workgroups((input_size as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
+        drop(pass_encoder);
+        self.queue.submit([command_encoder.finish()]);
     }
 
     pub async fn get_output<'a>(&'a self, combo: &BufferCombo) -> ChessOutputBufferView {
@@ -186,9 +223,11 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
 
     let buffers = BoardLists::init(&device);
 
-    let expand_shader = shaders::expand_pipeline(&device);
+    let expand_shader = shaders::expand(&device);
+    let eval_contract_shader = shaders::eval_contract(&device);
+    let contract_shader = shaders::contract(&device);
 
-    return GpuChessEvaluator { device, buffers, queue, global_data, just_zero, out_index, out_index_staging, expand_shader };
+    return GpuChessEvaluator { device, buffers, queue, global_data, just_zero, out_index, out_index_staging, expand_shader, eval_contract_shader, contract_shader };
 }
 
 pub async fn init_adapter() -> Adapter {
@@ -207,8 +246,9 @@ pub async fn init_adapter() -> Adapter {
 }
 
 pub struct BoardLists {
-    buffers: [Buffer; 4],
+    board_buffers: [Buffer; 4],
     buffer_sizes: [u32; 4],
+    eval_buffers: [Buffer; 4],
     staging: Buffer,
     /// The amount of boards per buffer (for buffers that contain boards)
     boards_per_buf: u64,
@@ -234,11 +274,22 @@ impl BoardLists {
         let buffer_size = boards_per_buf * size_of::<GpuBoard>() as u64;
         info!("We're allocating buffers of size {buffer_size}, which fits {boards_per_buf} boards");
 
-        let buffers = std::array::from_fn(|i| {
+        let board_buffers = std::array::from_fn(|i| {
             device.create_buffer(
                 &BufferDescriptor { 
                     label: Some(&format!("Board Storage Buf #{i}")),
                     size: buffer_size, 
+                    usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC, 
+                    mapped_at_creation: false
+                }
+            )
+        });
+
+        let eval_buffers = std::array::from_fn(|i| {
+            device.create_buffer(
+                &BufferDescriptor { 
+                    label: Some(&format!("Eval Storage Buf #{i}")),
+                    size: boards_per_buf * size_of::<f32>() as u64, 
                     usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC, 
                     mapped_at_creation: false
                 }
@@ -254,22 +305,22 @@ impl BoardLists {
             }
         );
 
-        return Self {buffers, boards_per_buf, buffer_size, staging, combo_cache: HashMap::default(), buffer_sizes: [0; 4]};
+        return Self {board_buffers, boards_per_buf, eval_buffers, buffer_size, staging, combo_cache: HashMap::default(), buffer_sizes: [0; 4]};
     }
 
     pub fn create_combo(&self, input: u8, output: u8, engine: &GpuChessEvaluator) -> BufferCombo {
-        let bind_group = engine.device.create_bind_group(
+        let expansion_bind = engine.device.create_bind_group(
             &BindGroupDescriptor {
                 label: None,
                 layout: &engine.expand_shader.0,
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer(self.buffers[input as usize].as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(self.board_buffers[input as usize].as_entire_buffer_binding())
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Buffer(self.buffers[output as usize].as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(self.board_buffers[output as usize].as_entire_buffer_binding())
                     },
                     BindGroupEntry {
                         binding: 2,
@@ -283,19 +334,67 @@ impl BoardLists {
             }
         );
 
+        let eval_contract_bind = engine.device.create_bind_group(
+            &BindGroupDescriptor {
+                label: None,
+                layout: &engine.eval_contract_shader.0,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer(self.board_buffers[output as usize].as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[input as usize].as_entire_buffer_binding())
+                    },
+                ]
+            }
+        );
+
+        let contract_bind = engine.device.create_bind_group(
+            &BindGroupDescriptor {
+                label: None,
+                layout: &engine.contract_shader.0,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer(self.board_buffers[output as usize].as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[output as usize].as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[input as usize].as_entire_buffer_binding())
+                    },
+                ]
+            }
+        );
+
         return BufferCombo {
-            bind: bind_group.into(),
+            expansion_bind,
+            eval_contract_bind,
+            contract_bind,
             input: input,
             output: output,
         };
     }
 
     pub fn get_in(&self, combo: &BufferCombo) -> &Buffer {
-        return &self.buffers[combo.input as usize];
+        return &self.board_buffers[combo.input as usize];
     }
 
     pub fn get_out(&self, combo: &BufferCombo) -> &Buffer {
-        return &self.buffers[combo.output as usize];
+        return &self.board_buffers[combo.output as usize];
     }
 
     pub fn staging(&self) -> &Buffer {
@@ -303,9 +402,10 @@ impl BoardLists {
     }
 }
 
-#[derive(Clone)]
 pub struct BufferCombo {
     input: u8,
     output: u8,
-    bind: Rc<BindGroup>,
+    expansion_bind: BindGroup,
+    eval_contract_bind: BindGroup,
+    contract_bind: BindGroup,
 }
