@@ -106,6 +106,30 @@ pub fn convert<T: Board>(input: &impl Board) -> T {
     return out;
 }
 
+pub fn find_move(before: &impl Board, after: &impl Board) -> Result<Move, ()> {
+    let mut start_pos = None;
+    for pos in Location::all() {
+        if before.get(pos).is_some() && after.get(pos).is_none() {
+            start_pos = Some(pos);
+            break;
+        }
+    }
+    let Some(start_pos) = start_pos else { return Err(()); };
+
+    let mut end_pos = None;
+    for pos in Location::all() {
+        if let Some(after_piece) = after.get(pos) {
+            if before.get(pos) != Some(after_piece) {
+                end_pos = Some(pos);
+                break;
+            }
+        }
+    }
+    let Some(end_pos) = end_pos else { return Err(()); };
+
+    return Ok(Move(start_pos, end_pos));
+}
+
 fn display(input: &impl Board, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     for y in (0..8).into_iter().rev() {
         for x in 0..8 {

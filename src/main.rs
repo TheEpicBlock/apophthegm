@@ -18,7 +18,7 @@ use float_ord::FloatOrd;
 use gpu::init_gpu_evaluator;
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends};
 
-use crate::{chess::{GameState, GpuBoard, board::convert, Side}, gpu::init_adapter};
+use crate::{chess::{GameState, GpuBoard, board::{convert, self}, Side}, gpu::init_adapter};
 
 const BOARDS_IN_BUF: u64 = 1048*1048;
 const WORKGROUP_SIZE: u64 = 64;
@@ -53,7 +53,8 @@ async fn main() {
     let bout = engine.get_output_boards(&pass_1).await;
     let eout = engine.get_output_evals(&pass_2).await;
     println!("Found {} states", bout.get_size());
-    let best_move = Iterator::zip(bout.iter(), eout.iter().map(|f| FloatOrd(f))).max_by_key(|b| b.1).unwrap().0;
+    let best_board = Iterator::zip(bout.iter(), eout.iter().map(|f| FloatOrd(f))).max_by_key(|b| b.1).unwrap().0;
+    let best_move = board::find_move(&starter_board.get_board(), &best_board).unwrap();
     println!("Best: \n{best_move}");
 
     drop(bout);
