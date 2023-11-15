@@ -70,5 +70,5 @@ fn evalPosition(board: ptr<function, Board>) -> f32 {
       eval_score += piece_score;
     }
   }
-  return 5.0;
+  return eval_score;
 }

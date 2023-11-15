@@ -136,7 +136,7 @@ impl GpuChessEvaluator {
         self.device.stop_capture();
     }
 
-    pub async fn get_output_boards<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<GpuBoard> {
+    pub async fn get_output_boards<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<{size_of::<GpuBoard>()}, impl (Fn(&[u8; size_of::<GpuBoard>()]) -> GpuBoard)> {
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         command_encoder.copy_buffer_to_buffer(
             &self.buffers.get_out(combo),
@@ -152,10 +152,10 @@ impl GpuChessEvaluator {
         let staging_view = self.buffers.staging().slice(..).get_mapped_range();
 
         let amount = self.buffers.buffer_sizes[combo.output as usize];
-        return SelfClosingBufferView{ buf_view: Some(staging_view), amount: amount as usize, buf: &self.buffers.staging(), phantom: PhantomData::default()};
+        return SelfClosingBufferView{ buf_view: Some(staging_view), amount: amount as usize, buf: &self.buffers.staging(), func: |b: &[u8; size_of::<GpuBoard>()]| GpuBoard::from_bytes(*b)};
     }
 
-    pub async fn get_output_evals<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<u32> {
+    pub async fn get_output_evals<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<4, impl (Fn(&[u8; 4]) -> f32)> {
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         command_encoder.copy_buffer_to_buffer(
             &self.buffers.eval_buffers[combo.input as usize],
@@ -171,7 +171,14 @@ impl GpuChessEvaluator {
         let staging_view = self.buffers.eval_staging.slice(..).get_mapped_range();
 
         let amount = self.buffers.buffer_sizes[combo.input as usize];
-        return SelfClosingBufferView{ buf_view: Some(staging_view), amount: amount as usize, buf: &self.buffers.eval_staging, phantom: PhantomData::default()};
+        return SelfClosingBufferView{
+            buf_view: Some(staging_view),
+            amount: amount as usize,
+            buf: &self.buffers.eval_staging,
+            func: |b: &[u8; 4]| {
+                let num = u32::from_le_bytes(*b);
+                return num as f32 / 16777216.0;
+            }};
     }
 
     pub fn create_combo(&self, input: u8, output: u8) -> BufferCombo {
@@ -179,40 +186,27 @@ impl GpuChessEvaluator {
     }
 }
 
-pub struct SelfClosingBufferView<'a, T> {
+pub struct SelfClosingBufferView<'a, const N: usize, F> {
     buf_view: Option<BufferView<'a>>,
     amount: usize,
     buf: &'a Buffer,
-    phantom: PhantomData<T>
+    func: F,
 }
 
-impl SelfClosingBufferView<'_, GpuBoard> {
+impl <const N: usize, F, T> SelfClosingBufferView<'_, N, F> where F: Fn(&[u8; N]) -> T {
     pub fn get_size(&self) -> usize {
         return self.amount;
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = GpuBoard> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = T> + '_ {
         // Safety: buf_view is always Some at this point
-        let chunks = self.buf_view.as_ref().unwrap().as_chunks::<{size_of::<GpuBoard>()}>().0;
-        let iter = chunks.iter().take(self.amount).map(|b| GpuBoard::from_bytes(*b));
+        let chunks = self.buf_view.as_ref().unwrap().as_chunks::<N>().0;
+        let iter = chunks.iter().take(self.amount).map(|b| {(self.func)(b)});
         return iter;
     }
 }
 
-impl SelfClosingBufferView<'_, u32> {
-    pub fn get_size(&self) -> usize {
-        return self.amount;
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
-        // Safety: buf_view is always Some at this point
-        let chunks = self.buf_view.as_ref().unwrap().as_chunks::<{size_of::<u32>()}>().0;
-        let iter = chunks.iter().take(self.amount).map(|b| u32::from_le_bytes(*b));
-        return iter;
-    }
-}
-
-impl <T> Drop for SelfClosingBufferView<'_, T> {
+impl <const N: usize, F> Drop for SelfClosingBufferView<'_, N, F> {
     fn drop(&mut self) {
         let view = self.buf_view.take();
         drop(view);
