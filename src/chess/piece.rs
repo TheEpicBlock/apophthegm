@@ -63,6 +63,13 @@ impl Side {
             Side::White => 0x8,
         };
     }
+
+    pub fn opposite(&self) -> Self {
+        return match self {
+            Side::Black => Side::White,
+            Side::White => Side::Black,
+        };
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

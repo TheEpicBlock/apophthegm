@@ -48,21 +48,23 @@ impl ThreadedEngine for MahEngine {
                     break;
                 }
 
+                let start_side = state.to_move;
+
                 let pass_1 = engine.create_combo(0, 1);
-                engine.set_input(&pass_1, [convert(&state.get_board())], Side::White, 0).await;
+                engine.set_input(&pass_1, [convert(&state.get_board())], start_side, 0).await;
                 engine.run_expansion(&pass_1).await;
 
                 let pass_2 = engine.create_combo(1, 2);
-                engine.set_global_data(Side::Black, 1);
+                engine.set_global_data(start_side.opposite(), 1);
                 engine.run_expansion(&pass_2).await;
 
 
-                let pass_3 = engine.create_combo(2, 3);
-                engine.set_global_data(Side::White, 2);
-                engine.run_expansion(&pass_3).await;
+                // let pass_3 = engine.create_combo(2, 3);
+                // engine.set_global_data(start_side, 2);
+                // engine.run_expansion(&pass_3).await;
 
-                engine.run_eval_contract(&pass_3, Side::White, 2).await;
-                engine.run_contract(&pass_2, Side::Black, 1).await;
+                engine.run_eval_contract(&pass_2, start_side, 1).await;
+                // engine.run_contract(&pass_2, start_side.opposite(), 1).await;
 
                 let bout = engine.get_output_boards(&pass_1).await;
                 let eout = engine.get_output_evals(&pass_2).await;

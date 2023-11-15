@@ -7,7 +7,7 @@ use super::{Location, board::StandardBoard, Piece, Side, Move};
 #[derive(Clone)]
 pub struct GameState {
     pieces: StandardBoard,
-    to_move: Side,
+    pub to_move: Side,
     en_passant_sq: Option<Location>,
     castles: EnumMap<Side, Castles>
 }
@@ -101,6 +101,7 @@ impl GameState {
         let prev = self.get(movee.0);
         self.set(movee.0, None);
         self.set(movee.1, prev);
+        self.to_move = self.to_move.opposite();
     }
 }
 

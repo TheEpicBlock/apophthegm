@@ -31,7 +31,7 @@ impl Location {
     fn from_letters(x: char, y: char) -> Self {
         assert!(x.is_ascii_lowercase());
         assert!(y.is_ascii_digit());
-        Self::new(x.to_ascii_char().unwrap().as_byte() - b'a', y.to_ascii_char().unwrap().as_byte() - b'0')
+        Self::new(x.to_ascii_char().unwrap().as_byte() - b'a', y.to_ascii_char().unwrap().as_byte() - b'1')
     }
 
     fn get_x(&self) -> u8 {
