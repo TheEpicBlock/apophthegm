@@ -193,12 +193,12 @@ fn getPiece(board: ptr<function, Board>, x: u32, y: u32) -> u32 {
 
 fn isColour(board: ptr<function, Board>, colour: u32, x: u32, y: u32) -> bool {
   let p = getPiece(board, x, y);
-  return p != 0u && ((p | 0x8u) == colour);
+  return p != 0u && ((p & 0x8u) == colour);
 }
 
 fn isOpponent(board: ptr<function, Board>, to_move: u32, x: u32, y: u32) -> bool {
   let p = getPiece(board, x, y);
-  return p != 0u && ((p | 0x8u) != to_move);
+  return p != 0u && ((p & 0x8u) != to_move);
 }
 
 fn movePiece(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32, yNew: u32) -> Board {
