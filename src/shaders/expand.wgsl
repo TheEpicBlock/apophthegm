@@ -45,59 +45,59 @@ fn expansion_pass(
           // Upward movement
           if (getPiece(&board, x, y+offset) == 0u) {
             // Regular upwards move
-            pawn_move(&board, x, y, x, y+offset, pawn_promote_rank, to_move);
+            pawn_move(&board, x, y, x, y+offset, pawn_promote_rank, to_move, global_id.x);
 
             if (y == pawn_start_rank && getPiece(&board, x, y+(offset*2u)) == 0u) {
-              var new_board2 = movePiece(&board, piece, x, y, x, y+(offset*2u));
+              var new_board2 = movePiece(&board, piece, x, y, x, y+(offset*2u), global_id.x);
               let out = atomicAdd(&out_index, 1u);
               output[out] = new_board2;
             }
           }
           // Capture
           if (x + 1u < 8u && isOpponent(&board, to_move, x + 1u, y+offset)) {
-            pawn_move(&board, x, y, x + 1u, y+offset, pawn_promote_rank, to_move);
+            pawn_move(&board, x, y, x + 1u, y+offset, pawn_promote_rank, to_move, global_id.x);
           }
           // Yes, this check is still correct, because it's unsigned
           if (x - 1u < 8u && isOpponent(&board, to_move, x - 1u, y+offset)) {
-            pawn_move(&board, x, y, x - 1u, y+offset, pawn_promote_rank, to_move);
+            pawn_move(&board, x, y, x - 1u, y+offset, pawn_promote_rank, to_move, global_id.x);
           }
         } else if (piece_type == King) {
-          try_move(&board, piece, x, y, (x - 1u), (y - 1u), to_move);
-          try_move(&board, piece, x, y, (x + 0u), (y - 1u), to_move);
-          try_move(&board, piece, x, y, (x + 1u), (y - 1u), to_move);
-          try_move(&board, piece, x, y, (x - 1u), (y + 0u), to_move);
-          try_move(&board, piece, x, y, (x + 1u), (y + 0u), to_move);
-          try_move(&board, piece, x, y, (x - 1u), (y + 1u), to_move);
-          try_move(&board, piece, x, y, (x + 0u), (y + 1u), to_move);
-          try_move(&board, piece, x, y, (x + 1u), (y + 1u), to_move);
+          try_move(&board, piece, x, y, (x - 1u), (y - 1u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x + 0u), (y - 1u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x + 1u), (y - 1u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x - 1u), (y + 0u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x + 1u), (y + 0u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x - 1u), (y + 1u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x + 0u), (y + 1u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x + 1u), (y + 1u), to_move, global_id.x);
         } else if (piece_type == Horsy) {
-          try_move(&board, piece, x, y, (x + 2u), (y - 1u), to_move);
-          try_move(&board, piece, x, y, (x + 2u), (y + 1u), to_move);
-          try_move(&board, piece, x, y, (x - 2u), (y - 1u), to_move);
-          try_move(&board, piece, x, y, (x - 2u), (y + 1u), to_move);
-          try_move(&board, piece, x, y, (x - 1u), (y + 2u), to_move);
-          try_move(&board, piece, x, y, (x + 1u), (y + 2u), to_move);
-          try_move(&board, piece, x, y, (x - 1u), (y - 2u), to_move);
-          try_move(&board, piece, x, y, (x + 1u), (y - 2u), to_move);
+          try_move(&board, piece, x, y, (x + 2u), (y - 1u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x + 2u), (y + 1u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x - 2u), (y - 1u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x - 2u), (y + 1u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x - 1u), (y + 2u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x + 1u), (y + 2u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x - 1u), (y - 2u), to_move, global_id.x);
+          try_move(&board, piece, x, y, (x + 1u), (y - 2u), to_move, global_id.x);
         } else if (piece_type == Rook || piece_type == Queen) {
-          move_in_dir(&board, piece, x, y, 1, 0, to_move);
-          move_in_dir(&board, piece, x, y, -1, 0, to_move);
-          move_in_dir(&board, piece, x, y, 0, 1, to_move);
-          move_in_dir(&board, piece, x, y, 0, -1, to_move);
+          move_in_dir(&board, piece, x, y, 1, 0, to_move, global_id.x);
+          move_in_dir(&board, piece, x, y, -1, 0, to_move, global_id.x);
+          move_in_dir(&board, piece, x, y, 0, 1, to_move, global_id.x);
+          move_in_dir(&board, piece, x, y, 0, -1, to_move, global_id.x);
         }
 
         if (piece_type == Bishop || piece_type == Queen) {
-          move_in_dir(&board, piece, x, y, 1, 1, to_move);
-          move_in_dir(&board, piece, x, y, 1, -1, to_move);
-          move_in_dir(&board, piece, x, y, -1, 1, to_move);
-          move_in_dir(&board, piece, x, y, -1, -1, to_move);
+          move_in_dir(&board, piece, x, y, 1, 1, to_move, global_id.x);
+          move_in_dir(&board, piece, x, y, 1, -1, to_move, global_id.x);
+          move_in_dir(&board, piece, x, y, -1, 1, to_move, global_id.x);
+          move_in_dir(&board, piece, x, y, -1, -1, to_move, global_id.x);
         }
       }
     }
   }
 }
 
-fn move_in_dir(board: ptr<function, Board>, piece: u32, x: u32, y: u32, dx: i32, dy: i32, to_move: u32) {
+fn move_in_dir(board: ptr<function, Board>, piece: u32, x: u32, y: u32, dx: i32, dy: i32, to_move: u32, prev: u32) {
   var xNew = x + u32(dx);
   var yNew = y + u32(dy);
   if (xNew >= 8u) { return; }
@@ -113,7 +113,7 @@ fn move_in_dir(board: ptr<function, Board>, piece: u32, x: u32, y: u32, dx: i32,
     }
     new_board.pieces[yNew] &= ~(0xFu << (xNew*4u));
     new_board.pieces[yNew] |= (piece << (xNew*4u));
-    setMove(&new_board, x, y, xNew, yNew, 0u);
+    setPrev(&new_board, prev);
     let out = atomicAdd(&out_index, 1u);
     output[out] = new_board;
 
@@ -130,41 +130,38 @@ fn move_in_dir(board: ptr<function, Board>, piece: u32, x: u32, y: u32, dx: i32,
   }
 }
 
-fn try_move(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32, yNew: u32, to_move: u32) {
+fn try_move(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32, yNew: u32, to_move: u32, prev: u32) {
   if (xNew >= 8u) { return; }
   if (yNew >= 8u) { return; }
   if (!isColour(board, to_move, xNew, yNew)) {
-    var new_board = movePiece(board, piece, x, y, xNew, yNew);
+    var new_board = movePiece(board, piece, x, y, xNew, yNew, prev);
     let out = atomicAdd(&out_index, 1u);
     output[out] = new_board;
   }
 }
 
-fn pawn_move(board: ptr<function, Board>, x: u32, y: u32, xNew: u32, yNew: u32, pawn_promote_rank: u32, to_move: u32) {
+fn pawn_move(board: ptr<function, Board>, x: u32, y: u32, xNew: u32, yNew: u32, pawn_promote_rank: u32, to_move: u32, prev: u32) {
   if (yNew == pawn_promote_rank) {
     // Promote
     var new_board = *board;
     new_board.pieces[y] &= ~(0xFu << (x*4u)); // Remove the original pawn
+    setPrev(&new_board, prev);
     let clear_mask = ~(0xFu << (xNew*4u));
     let out = atomicAdd(&out_index, 4u);
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Queen | to_move) << (xNew*4u));
-    setMove(&new_board, x, y, xNew, yNew, Queen);
     output[out] = new_board;
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Bishop | to_move) << (xNew*4u));
-    setMove(&new_board, x, y, xNew, yNew, Bishop);
     output[out+1u] = new_board;
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Horsy | to_move) << (xNew*4u));
-    setMove(&new_board, x, y, xNew, yNew, Horsy);
     output[out+2u] = new_board;
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Rook | to_move) << (xNew*4u));
-    setMove(&new_board, x, y, xNew, yNew, Rook);
     output[out+3u] = new_board;
   } else {
-    var new_board = movePiece(board, (Pawn | to_move), x, y, xNew, yNew);
+    var new_board = movePiece(board, (Pawn | to_move), x, y, xNew, yNew, prev);
     let out = atomicAdd(&out_index, 1u);
     output[out] = new_board;
   }
@@ -180,37 +177,36 @@ fn isOpponent(board: ptr<function, Board>, to_move: u32, x: u32, y: u32) -> bool
   return p != 0u && ((p & 0x8u) != to_move);
 }
 
-fn movePiece(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32, yNew: u32) -> Board {
+fn movePiece(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32, yNew: u32, prev: u32) -> Board {
   var new_board = *board;
   new_board.pieces[y] &= ~(0xFu << (x*4u));
   new_board.pieces[yNew] &= ~(0xFu << (xNew*4u));
   new_board.pieces[yNew] |= (piece << (xNew*4u));
-  setMove(&new_board, x, y, xNew, yNew, 0u);
+  setPrev(&new_board, prev);
   return new_board;
 }
 
-fn setMove(board: ptr<function, Board>, x: u32, y: u32, xNew: u32, yNew: u32, special: u32) {
+fn setPrev(board: ptr<function, Board>, id: u32) {
   // msssxxxy yyXXXYYY
-  let move_u16 = (globals.to_move << 12u) | (special << 12u) | (x << 9u) | (y << 6u) | (xNew << 3u) | (yNew << 0u);
   switch globals.move_index {
     case 0u: {
       (*board).pieces[8] &= ~(0xFFu);
-      (*board).pieces[8] |= move_u16;
+      (*board).pieces[8] |= id;
     }
     case 1u: {
       (*board).pieces[8] &= ~(0xFFu << 16u);
-      (*board).pieces[8] |= (move_u16 << 16u);
+      (*board).pieces[8] |= (id << 16u);
     }
     case 2u: {
       (*board).pieces[9] &= ~(0xFFu);
-      (*board).pieces[9] |= move_u16;
+      (*board).pieces[9] |= id;
     }
     case 3u: {
       (*board).pieces[9] &= ~(0xFFu << 16u);
-      (*board).pieces[9] |= (move_u16 << 16u);
+      (*board).pieces[9] |= (id << 16u);
     }
     default: {
       // I trust this doesn't happen, for I'm an ostrich
     }
-  } 
+  }
 }
