@@ -12,10 +12,10 @@ struct GlobalData {
 var<storage, read_write> input: array<Board>;
 @group(0) @binding(1)
 var<storage, read_write> output: array<Board>;
-@group(0) @binding(2)
-var<uniform> globals: GlobalData;
 @group(0) @binding(3)
 var<storage, read_write> out_index: atomic<u32>;
+@group(0) @binding(2)
+var<uniform> globals: GlobalData;
 
 const King = 1u;
 const Queen = 2u;

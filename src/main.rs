@@ -25,23 +25,27 @@ const BUFFER_SIZE: u64 = size_of::<GpuBoard>() as u64 * BOARDS_IN_BUF;
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    let mut engine = init_gpu_evaluator(&init_adapter().await).await;
+    let adapter = init_adapter().await;
+    let mut engine = init_gpu_evaluator(&adapter).await;
 
     let starter_board = GameState::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
     println!("Start:\n{}", starter_board.get_board());
 
-    engine.set_input([convert(&starter_board.get_board())], Side::White, 0).await;
-    engine.run_pass(true);
+    let combo_1 = engine.create_combo(0, 1);
+    let combo_2 = engine.create_combo(1, 2);
+
+    engine.set_input(&combo_1, [convert(&starter_board.get_board())], Side::White, 0).await;
+    engine.run_pass(&combo_1);
 
     engine.set_global_data(Side::Black, 1);
-    engine.run_pass(true);
+    engine.run_pass(&combo_2);
 
-    let out = engine.get_output().await;
+    let out = engine.get_output(&combo_2).await;
     println!("Found {} states", out.get_size());
-    out.iter().for_each(|b| {
-        println!("{b}");
-    });
+    // out.iter().for_each(|b| {
+    //     println!("{b}");
+    // });
     drop(out);
 }
 
