@@ -3,7 +3,7 @@ var<uniform> globals: GlobalData;
 @group(0) @binding(1)
 var<storage, read> child_boards: array<Board>;
 @group(0) @binding(2)
-var<storage, read_write> parent_evals: array<atomic<u32>>;
+var<storage, read_write> parent_evals: array<atomic<i32>>;
 
 @compute @workgroup_size(64)
 fn eval_contract_pass(
@@ -19,7 +19,7 @@ fn eval_contract_pass(
   }
   var board = child_boards[global_id.x];
   let score = evalPosition(&board);
-  let fp_score = u32(score * 16777216.);
+  let fp_score = i32(score * 16777216.);
   let prev_index = getPrev(&board, globals.move_index);
 
   switch globals.to_move {

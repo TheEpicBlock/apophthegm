@@ -3,9 +3,9 @@ var<uniform> globals: GlobalData;
 @group(0) @binding(1)
 var<storage, read> child_boards: array<Board>;
 @group(0) @binding(2)
-var<storage, read> child_evals: array<u32>;
+var<storage, read> child_evals: array<i32>;
 @group(0) @binding(3)
-var<storage, read_write> parent_evals: array<atomic<u32>>;
+var<storage, read_write> parent_evals: array<atomic<i32>>;
 
 @compute @workgroup_size(64)
 fn eval_contract_pass(

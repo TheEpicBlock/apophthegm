@@ -162,7 +162,7 @@ impl GpuChessEvaluator {
             0, // Source offset
             &self.buffers.eval_staging,
             0, // Destination offset
-            self.buffers.boards_per_buf * size_of::<u32>() as u64,
+            self.buffers.boards_per_buf * size_of::<i32>() as u64,
         );
         self.queue.submit([command_encoder.finish()]);
 
@@ -176,7 +176,7 @@ impl GpuChessEvaluator {
             amount: amount as usize,
             buf: &self.buffers.eval_staging,
             func: |b: &[u8; 4]| {
-                let num = u32::from_le_bytes(*b);
+                let num = i32::from_le_bytes(*b);
                 return num as f32 / 1048576.0;
             }};
     }
@@ -324,7 +324,7 @@ impl BoardLists {
             device.create_buffer(
                 &BufferDescriptor { 
                     label: Some(&format!("Eval Storage Buf #{i}")),
-                    size: boards_per_buf * size_of::<u32>() as u64, 
+                    size: boards_per_buf * size_of::<i32>() as u64, 
                     usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC, 
                     mapped_at_creation: false
                 }
@@ -343,7 +343,7 @@ impl BoardLists {
         let eval_staging = device.create_buffer(
             &BufferDescriptor { 
                 label: Some(&format!("Eval Staging")),
-                size: buffer_size, 
+                size: boards_per_buf * size_of::<i32>() as u64, 
                 usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST, 
                 mapped_at_creation: false
             }
