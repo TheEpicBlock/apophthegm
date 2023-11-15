@@ -43,7 +43,7 @@ impl GpuChessEvaluator {
 
         assert!(move_num < 4);
         let mut data = [0; 12];
-        data[0..4].copy_from_slice(bytemuck::bytes_of(&(i as u32)));
+        data[0..4].copy_from_slice(bytemuck::bytes_of(&(i as u32).to_le_bytes()));
         data[4..8].copy_from_slice(bytemuck::bytes_of(&to_move.gpu_representation()));
         data[8..12].copy_from_slice(bytemuck::bytes_of(&move_num));
         self.queue.write_buffer(&self.global_data, 0, &data);
@@ -52,7 +52,7 @@ impl GpuChessEvaluator {
     pub fn set_all_global_data(&self, input_size: u32, to_move: Side, move_num: u32) {
         assert!(move_num < 4);
         let mut data = [0; 12];
-        data[0..4].copy_from_slice(bytemuck::bytes_of(&(input_size as u32)));
+        data[0..4].copy_from_slice(&(input_size as u32).to_le_bytes());
         data[4..8].copy_from_slice(bytemuck::bytes_of(&to_move.gpu_representation()));
         data[8..12].copy_from_slice(bytemuck::bytes_of(&move_num));
         self.queue.write_buffer(&self.global_data, 0, &data);
@@ -67,6 +67,7 @@ impl GpuChessEvaluator {
     }
 
     pub async fn run_expansion(&mut self, combo: &BufferCombo) {
+        self.device.start_capture();
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.expand_shader.1);
@@ -102,9 +103,11 @@ impl GpuChessEvaluator {
         self.buffers.buffer_sizes[combo.output as usize] = output_size;
         drop(out_index_view);
         self.out_index_staging.unmap();
+        self.device.stop_capture();
     }
 
     pub async fn run_eval_contract(&mut self, combo: &BufferCombo, to_move: Side, move_num: u32) {
+        self.device.start_capture();
         let input_size = self.buffers.buffer_sizes[combo.output as usize];
         self.set_all_global_data(input_size, to_move, move_num);
 
@@ -115,9 +118,11 @@ impl GpuChessEvaluator {
         pass_encoder.dispatch_workgroups((input_size as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
         drop(pass_encoder);
         self.queue.submit([command_encoder.finish()]);
+        self.device.stop_capture();
     }
 
     pub async fn run_contract(&mut self, combo: &BufferCombo, to_move: Side, move_num: u32) {
+        self.device.start_capture();
         let input_size = self.buffers.buffer_sizes[combo.output as usize];
         self.set_all_global_data(input_size, to_move, move_num);
 
@@ -128,6 +133,7 @@ impl GpuChessEvaluator {
         pass_encoder.dispatch_workgroups((input_size as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
         drop(pass_encoder);
         self.queue.submit([command_encoder.finish()]);
+        self.device.stop_capture();
     }
 
     pub async fn get_output_boards<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<GpuBoard> {

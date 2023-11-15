@@ -42,24 +42,22 @@ async fn main() {
     engine.run_expansion(&pass_2).await;
 
 
-    let pass_3 = engine.create_combo(2, 3);
-    engine.set_global_data(Side::White, 2);
-    engine.run_expansion(&pass_3).await;
+    // let pass_3 = engine.create_combo(2, 3);
+    // engine.set_global_data(Side::White, 2);
+    // engine.run_expansion(&pass_3).await;
 
-    engine.run_eval_contract(&pass_3, Side::White, 2).await;
-    engine.run_contract(&pass_2, Side::Black, 1).await;
+    engine.run_eval_contract(&pass_2, Side::White, 0).await;
+    // engine.run_contract(&pass_2, Side::Black, 1).await;
 
-    let out = engine.get_output_boards(&pass_3).await;
-    println!("Found {} states", out.get_size());
-    // out.iter().for_each(|b| {
-    //     println!("{b}");
-    // });
-    drop(out);
+    let bout = engine.get_output_boards(&pass_2).await;
+    let eout = engine.get_output_evals(&pass_2).await;
+    println!("Found {} states", bout.get_size());
+    for (b, e) in Iterator::zip(bout.iter(), eout.iter()) {
+        println!("{b}=={e}");
+    }
 
-    let out = engine.get_output_evals(&pass_2).await;
-    out.iter().for_each(|e| {
-        println!("{e}");
-    });
+    drop(bout);
+    drop(eout);
 }
 
 #[cfg(test)]
