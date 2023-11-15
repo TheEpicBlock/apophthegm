@@ -12,7 +12,7 @@ pub use state::GameState;
 pub use piece::{Piece, PieceType, Side};
 pub use board::{Board, GpuBoard, StandardBoard};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Location(u8);
 
 impl Display for Location {
@@ -52,6 +52,7 @@ impl Location {
 }
 
 // Todo, encode promotion
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Move(pub Location, pub Location);
 
 impl Display for Move {

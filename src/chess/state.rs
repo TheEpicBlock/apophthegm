@@ -4,6 +4,7 @@ use crate::chess::board::Board;
 
 use super::{Location, board::StandardBoard, Piece, Side, Move};
 
+#[derive(Clone)]
 pub struct GameState {
     pieces: StandardBoard,
     to_move: Side,
@@ -11,6 +12,7 @@ pub struct GameState {
     castles: EnumMap<Side, Castles>
 }
 
+#[derive(Clone, Copy)]
 pub struct Castles {
     kingside: bool,
     queenside: bool,
