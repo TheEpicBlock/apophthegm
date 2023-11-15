@@ -14,6 +14,7 @@ mod shaders;
 use core::slice::SlicePattern;
 use std::{mem::size_of, thread, time::Duration};
 
+use float_ord::FloatOrd;
 use gpu::init_gpu_evaluator;
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends};
 
@@ -42,19 +43,18 @@ async fn main() {
     engine.run_expansion(&pass_2).await;
 
 
-    // let pass_3 = engine.create_combo(2, 3);
-    // engine.set_global_data(Side::White, 2);
-    // engine.run_expansion(&pass_3).await;
+    let pass_3 = engine.create_combo(2, 3);
+    engine.set_global_data(Side::White, 2);
+    engine.run_expansion(&pass_3).await;
 
-    engine.run_eval_contract(&pass_2, Side::White, 1).await;
-    // engine.run_contract(&pass_2, Side::Black, 1).await;
+    engine.run_eval_contract(&pass_3, Side::White, 2).await;
+    engine.run_contract(&pass_2, Side::Black, 1).await;
 
     let bout = engine.get_output_boards(&pass_1).await;
     let eout = engine.get_output_evals(&pass_2).await;
     println!("Found {} states", bout.get_size());
-    for (b, e) in Iterator::zip(bout.iter(), eout.iter()) {
-        println!("{b}=={e}\n");
-    }
+    let best_move = Iterator::zip(bout.iter(), eout.iter().map(|f| FloatOrd(f))).max_by_key(|b| b.1).unwrap().0;
+    println!("Best: \n{best_move}");
 
     drop(bout);
     drop(eout);

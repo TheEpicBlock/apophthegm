@@ -62,6 +62,7 @@ dependencies = [
  "ctor",
  "enum-map",
  "env_logger",
+ "float-ord",
  "futures-channel",
  "log",
  "pollster",
@@ -289,6 +290,12 @@ dependencies = [
  "libc",
  "windows-sys",
 ]
+
+[[package]]
+name = "float-ord"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ce81f49ae8a0482e4c55ea62ebbd7e5a686af544c00b9d090bba3ff9be97b3d"
 
 [[package]]
 name = "flume"
