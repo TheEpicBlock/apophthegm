@@ -2,6 +2,7 @@ use core::slice::SlicePattern;
 use std::collections::HashMap;
 use std::iter::{Map, Take};
 use std::mem::size_of;
+use std::rc::Rc;
 use std::slice::Iter;
 
 use log::info;
@@ -53,7 +54,7 @@ impl GpuChessEvaluator {
         self.queue.write_buffer(&self.global_data, 4, &data);
     }
 
-    pub fn run_expansion(&mut self, combo: &BufferCombo) -> SubmissionIndex {
+    pub async fn run_expansion(&mut self, combo: &BufferCombo) {
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.expand_shader.1);
@@ -81,7 +82,14 @@ impl GpuChessEvaluator {
             0, // Destination offset
             1 * size_of::<u32>() as u64,
         );
-        return self.queue.submit([command_encoder.finish()]);
+        self.queue.submit([command_encoder.finish()]);
+
+        self.out_index_staging.slice(..).map_buffer(&self.device, wgpu::MapMode::Read).await.unwrap();
+        let out_index_view = self.out_index_staging.slice(..).get_mapped_range();
+        let output_size: u32 = *bytemuck::from_bytes(&out_index_view.as_slice());
+        self.buffers.buffer_sizes[combo.output as usize] = output_size;
+        drop(out_index_view);
+        self.out_index_staging.unmap();
     }
 
     pub async fn get_output<'a>(&'a self, combo: &BufferCombo) -> ChessOutputBufferView {
@@ -96,14 +104,10 @@ impl GpuChessEvaluator {
         self.queue.submit([command_encoder.finish()]);
 
         self.buffers.staging().slice(..).map_buffer(&self.device, wgpu::MapMode::Read).await.unwrap();
-        self.out_index_staging.slice(..).map_buffer(&self.device, wgpu::MapMode::Read).await.unwrap();
         
         let staging_view = self.buffers.staging().slice(..).get_mapped_range();
-        let out_index_view = self.out_index_staging.slice(..).get_mapped_range();
 
-        let amount: u32 = *bytemuck::from_bytes(&out_index_view.as_slice());
-        drop(out_index_view);
-        self.out_index_staging.unmap();
+        let amount = self.buffers.buffer_sizes[combo.output as usize];
         return ChessOutputBufferView{ buf_view: Some(staging_view), amount: amount as usize, buf: &self.buffers.staging()};
     }
 
@@ -204,6 +208,7 @@ pub async fn init_adapter() -> Adapter {
 
 pub struct BoardLists {
     buffers: [Buffer; 4],
+    buffer_sizes: [u32; 4],
     staging: Buffer,
     /// The amount of boards per buffer (for buffers that contain boards)
     boards_per_buf: u64,
@@ -249,7 +254,7 @@ impl BoardLists {
             }
         );
 
-        return Self {buffers, boards_per_buf, buffer_size, staging, combo_cache: HashMap::default()};
+        return Self {buffers, boards_per_buf, buffer_size, staging, combo_cache: HashMap::default(), buffer_sizes: [0; 4]};
     }
 
     pub fn create_combo(&self, input: u8, output: u8, engine: &GpuChessEvaluator) -> BufferCombo {
@@ -279,7 +284,7 @@ impl BoardLists {
         );
 
         return BufferCombo {
-            bind: bind_group,
+            bind: bind_group.into(),
             input: input,
             output: output,
         };
@@ -298,8 +303,9 @@ impl BoardLists {
     }
 }
 
+#[derive(Clone)]
 pub struct BufferCombo {
     input: u8,
     output: u8,
-    bind: BindGroup,
+    bind: Rc<BindGroup>,
 }

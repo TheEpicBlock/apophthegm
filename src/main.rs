@@ -37,10 +37,10 @@ async fn main() {
     let combo_2 = engine.create_combo(1, 2);
 
     engine.set_input(&combo_1, [convert(&starter_board.get_board())], Side::White, 0).await;
-    engine.run_expansion(&combo_1);
+    engine.run_expansion(&combo_1).await;
 
     engine.set_global_data(Side::Black, 1);
-    engine.run_expansion(&combo_2);
+    engine.run_expansion(&combo_2).await;
 
     let out = engine.get_output(&combo_2).await;
     println!("Found {} states", out.get_size());
