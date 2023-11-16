@@ -43,14 +43,8 @@ fn evalPosition(board: ptr<function, Board>) -> i32 {
       let piece_type = piece & 0x7u;
       if (piece_type == Pawn) {
         piece_score = 1;
-        if (y == 3u || y == 4u) {
-          piece_score = 100;
-        }
-        if (y == 2u || y == 5u) {
-          piece_score = 120;
-        }
-        if (x == 3u || x == 4u) {
-          piece_score += 10;
+        if ((y == 3u || y == 4u) && (x == 3u || x == 4u)) {
+          piece_score = 150;
         }
       } else if (piece_type == Horsy || piece_type == Bishop) {
         piece_score = 300;
