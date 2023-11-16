@@ -18,7 +18,7 @@ fn eval_contract_pass(
     return;
   }
   var board = child_boards[global_id.x];
-  let score = u32(evalPosition(&board) + 1073741824);
+  let score = u32(evalPosition(&board)) ^ (1u<<31u);
   let prev_index = getPrev(&board, globals.move_index);
 
   switch globals.to_move {

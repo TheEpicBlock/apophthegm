@@ -28,6 +28,7 @@ pub struct GpuChessEvaluator {
     expand_shader: Shader,
     eval_contract_shader: Shader,
     contract_shader: Shader,
+    fill_max_shader: Shader,
 }
 
 impl GpuChessEvaluator {
@@ -113,7 +114,15 @@ impl GpuChessEvaluator {
         self.set_all_global_data(input_size, to_move, move_num);
 
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
-        command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.input as usize], 0, None);
+        if to_move == Side::Black {
+            let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
+            pass_encoder.set_pipeline(&self.fill_max_shader.1);
+            pass_encoder.set_bind_group(0, &combo.fill_max_bind, &[]);
+            pass_encoder.dispatch_workgroups((input_size as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
+            drop(pass_encoder);
+        } else {
+            command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.input as usize], 0, None);
+        }
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.eval_contract_shader.1);
         pass_encoder.set_bind_group(0, &combo.eval_contract_bind, &[]);
@@ -129,7 +138,15 @@ impl GpuChessEvaluator {
         self.set_all_global_data(input_size, to_move, move_num);
 
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
-        command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.input as usize], 0, None);
+        if to_move == Side::Black {
+            let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
+            pass_encoder.set_pipeline(&self.fill_max_shader.1);
+            pass_encoder.set_bind_group(0, &combo.fill_max_bind, &[]);
+            pass_encoder.dispatch_workgroups((input_size as f64 / WORKGROUP_SIZE as f64) as u32, 1, 1);
+            drop(pass_encoder);
+        } else {
+            command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.input as usize], 0, None);
+        }
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.contract_shader.1);
         pass_encoder.set_bind_group(0, &combo.contract_bind, &[]);
@@ -179,8 +196,8 @@ impl GpuChessEvaluator {
             amount: amount as usize,
             buf: &self.buffers.eval_staging,
             func: |b: &[u8; size_of::<u32>()]| {
-                let num = (u32::from_le_bytes(*b) as i64) - 1073741824;
-                return EvalScore::from(num as i32);
+                let num = bytemuck::cast(u32::from_le_bytes(*b) ^ (1<<31));
+                return EvalScore::from(num);
             }};
     }
 
@@ -263,8 +280,9 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
     let expand_shader = shaders::expand(&device);
     let eval_contract_shader = shaders::eval_contract(&device);
     let contract_shader = shaders::contract(&device);
+    let fill_max_shader = shaders::fill_max(&device);
 
-    return GpuChessEvaluator { device, buffers, queue, global_data, just_zero, out_index, out_index_staging, expand_shader, eval_contract_shader, contract_shader };
+    return GpuChessEvaluator { device, buffers, queue, global_data, just_zero, out_index, out_index_staging, expand_shader, eval_contract_shader, contract_shader, fill_max_shader };
 }
 
 pub async fn init_adapter() -> Adapter {
@@ -427,10 +445,28 @@ impl BoardLists {
             }
         );
 
+        let fill_max_bind = engine.device.create_bind_group(
+            &BindGroupDescriptor {
+                label: None,
+                layout: &engine.fill_max_shader.0,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[input as usize].as_entire_buffer_binding())
+                    },
+                ]
+            }
+        );
+
         return BufferCombo {
             expansion_bind,
             eval_contract_bind,
             contract_bind,
+            fill_max_bind,
             input: input,
             output: output,
         };
@@ -455,4 +491,5 @@ pub struct BufferCombo {
     expansion_bind: BindGroup,
     eval_contract_bind: BindGroup,
     contract_bind: BindGroup,
+    fill_max_bind: BindGroup,
 }

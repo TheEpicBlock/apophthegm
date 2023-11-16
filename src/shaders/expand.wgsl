@@ -187,22 +187,22 @@ fn movePiece(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32,
 }
 
 fn setPrev(board: ptr<function, Board>, id: u32) {
-  // msssxxxy yyXXXYYY
+  // id is assumed to be a u16
   switch globals.move_index {
     case 0u: {
-      (*board).pieces[8] &= ~(0xFFu);
+      (*board).pieces[8] &= ~(0xFFFFu);
       (*board).pieces[8] |= id;
     }
     case 1u: {
-      (*board).pieces[8] &= ~(0xFFu << 16u);
+      (*board).pieces[8] &= ~(0xFFFFu << 16u);
       (*board).pieces[8] |= (id << 16u);
     }
     case 2u: {
-      (*board).pieces[9] &= ~(0xFFu);
+      (*board).pieces[9] &= ~(0xFFFFu);
       (*board).pieces[9] |= id;
     }
     case 3u: {
-      (*board).pieces[9] &= ~(0xFFu << 16u);
+      (*board).pieces[9] &= ~(0xFFFFu << 16u);
       (*board).pieces[9] |= (id << 16u);
     }
     default: {
