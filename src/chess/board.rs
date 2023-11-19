@@ -96,6 +96,10 @@ impl GpuBoard {
     pub fn to_bytes(self) -> [u8; size_of::<Self>()] {
         self.0
     }
+
+    pub fn getPrev(&self) -> usize {
+        return u32::from_le_bytes(self.0.as_chunks::<{size_of::<u32>()}>().0[8 as usize]) as usize;
+    }
 }
 
 pub fn convert<T: Board>(input: &impl Board) -> T {

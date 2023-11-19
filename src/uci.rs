@@ -1,4 +1,4 @@
-use std::{io, sync::{atomic::AtomicBool, Mutex, Arc}, rc::Rc};
+use std::{io, sync::{atomic::{AtomicBool, AtomicU16, AtomicU64}, Mutex, Arc}, rc::Rc};
 
 use crate::chess::{GameState, Move};
 
@@ -65,6 +65,8 @@ pub fn start_loop(engine: impl ThreadedEngine) -> ! {
 
                 let coms = Arc::new(UciCommunication {
                     stopped: AtomicBool::new(false),
+                    depth: AtomicU16::new(0),
+                    nodes: AtomicU64::new(0),
                     best: Mutex::new(None),
                 });
                 current_search = Some(coms.clone());
@@ -87,6 +89,8 @@ pub fn start_loop(engine: impl ThreadedEngine) -> ! {
 
 pub struct UciCommunication{
     stopped: AtomicBool,
+    depth: AtomicU16,
+    nodes: AtomicU64,
     best: Mutex<Option<Move>>
 }
 
@@ -96,15 +100,22 @@ impl UciCommunication {
             return;
         }
         *self.best.lock().unwrap() = Some(m);
-        println!("info pv {}", m);
-        println!("info score cp {}", score);
+        let depth = self.depth.load(std::sync::atomic::Ordering::Relaxed);
+        let nodes = self.nodes.load(std::sync::atomic::Ordering::Relaxed);
+        println!("info score cp {score} depth {depth} nodes {nodes} pv {m}");
+    }
+
+    pub fn report_depth_and_nodes(&self, depth: u16, nodes: u64) {
+        self.depth.fetch_max(depth, std::sync::atomic::Ordering::Relaxed);
+        let n = self.nodes.fetch_add(nodes, std::sync::atomic::Ordering::Relaxed);
+        println!("info depth {} nodes {}", depth, n+nodes);
     }
 
     pub fn stop(&self) {
         if self.is_stopped() {
             return;
         }
-        self.stopped.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.stopped.store(true, std::sync::atomic::Ordering::SeqCst);
 
         let best = *self.best.lock().unwrap();
         match best {
@@ -119,7 +130,7 @@ impl UciCommunication {
     }
 
     pub fn is_stopped(&self) -> bool {
-        return self.stopped.load(std::sync::atomic::Ordering::Relaxed);
+        return self.stopped.load(std::sync::atomic::Ordering::SeqCst);
     }
 }
 

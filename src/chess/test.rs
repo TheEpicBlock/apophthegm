@@ -25,8 +25,8 @@ impl TestEngine for GpuTester {
     async fn get_moves(board_in: GameState) -> Vec<Self::Out> {
         let mut engine = init_gpu_evaluator(&GPU_ADAPTER).await;
         let buf_combo = engine.create_combo(0, 1);
-        engine.set_input(&buf_combo, [convert(&board_in.get_board())], super::Side::White, 0).await;
-        engine.run_expansion(&buf_combo).await;
+        engine.set_input(&buf_combo, [convert(&board_in.get_board())]).await;
+        engine.run_expansion(&buf_combo, super::Side::White).await;
         let out = engine.get_output_boards(&buf_combo).await;
         out.iter().collect()
     }
