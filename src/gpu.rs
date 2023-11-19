@@ -42,7 +42,7 @@ impl GpuChessEvaluator {
             self.queue.write_buffer(self.buffers.get_in(c), start_write as u64, &board.to_bytes());
             i += 1;
         });
-        self.buffers.buffer_sizes[c.input as usize] = i as u32;
+        self.buffers.buffer_sizes[c.parent as usize] = i as u32;
     }
 
     pub fn set_all_global_data(&self, input_size: u32, to_move: Side, move_num: u32) {
@@ -64,7 +64,7 @@ impl GpuChessEvaluator {
 
     pub async fn run_expansion(&mut self, combo: &BufferCombo, to_move: Side) {
         self.device.start_capture();
-        let parent_size = self.buffers.buffer_sizes[combo.input as usize];
+        let parent_size = self.buffers.buffer_sizes[combo.parent as usize];
         self.set_all_global_data(parent_size, to_move, 0);
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
@@ -98,7 +98,7 @@ impl GpuChessEvaluator {
         self.out_index_staging.slice(..).map_buffer(&self.device, wgpu::MapMode::Read).await.unwrap();
         let out_index_view = self.out_index_staging.slice(..).get_mapped_range();
         let output_size: u32 = *bytemuck::from_bytes(&out_index_view.as_slice());
-        self.buffers.buffer_sizes[combo.output as usize] = output_size;
+        self.buffers.buffer_sizes[combo.child as usize] = output_size;
         drop(out_index_view);
         self.out_index_staging.unmap();
         self.device.stop_capture();
@@ -106,8 +106,8 @@ impl GpuChessEvaluator {
 
     pub async fn run_eval_contract(&mut self, combo: &BufferCombo, to_move: Side, move_num: u32) {
         self.device.start_capture();
-        let parent_size = self.buffers.buffer_sizes[combo.input as usize]; // For the output evals
-        let child_size = self.buffers.buffer_sizes[combo.output as usize]; // For the input boards
+        let parent_size = self.buffers.buffer_sizes[combo.parent as usize]; // For the output evals
+        let child_size = self.buffers.buffer_sizes[combo.child as usize]; // For the input boards
         self.set_all_global_data(parent_size, to_move, move_num);
 
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
@@ -118,7 +118,7 @@ impl GpuChessEvaluator {
             pass_encoder.dispatch_workgroups(ceil_div(parent_size, WORKGROUP_SIZE), 1, 1);
             drop(pass_encoder);
         } else {
-            command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.input as usize], 0, Some(NonZeroU64::new(parent_size as u64).unwrap()));
+            command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.parent as usize], 0, Some(NonZeroU64::new(parent_size as u64).unwrap()));
         }
         self.set_all_global_data(child_size, to_move, move_num);
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
@@ -132,8 +132,8 @@ impl GpuChessEvaluator {
 
     pub async fn run_contract(&mut self, combo: &BufferCombo, to_move: Side, move_num: u32) {
         self.device.start_capture();
-        let parent_size = self.buffers.buffer_sizes[combo.input as usize]; // For the output evals
-        let child_size = self.buffers.buffer_sizes[combo.output as usize]; // For the input boards
+        let parent_size = self.buffers.buffer_sizes[combo.parent as usize]; // For the output evals
+        let child_size = self.buffers.buffer_sizes[combo.child as usize]; // For the input boards
         self.set_all_global_data(parent_size, to_move, move_num);
 
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
@@ -144,7 +144,7 @@ impl GpuChessEvaluator {
             pass_encoder.dispatch_workgroups(ceil_div(parent_size, WORKGROUP_SIZE), 1, 1);
             drop(pass_encoder);
         } else {
-            command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.input as usize], 0, None);
+            command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.parent as usize], 0, None);
         }
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.contract_shader.1);
@@ -156,7 +156,7 @@ impl GpuChessEvaluator {
     }
 
     pub fn get_out_boards_len(&self, combo: &BufferCombo) -> u64 {
-        return self.buffers.buffer_sizes[combo.output as usize] as u64;
+        return self.buffers.buffer_sizes[combo.child as usize] as u64;
     }
 
     pub async fn get_output_boards<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<{size_of::<GpuBoard>()}, impl (Fn(&[u8; size_of::<GpuBoard>()]) -> GpuBoard)> {
@@ -174,14 +174,14 @@ impl GpuChessEvaluator {
         
         let staging_view = self.buffers.staging().slice(..).get_mapped_range();
 
-        let amount = self.buffers.buffer_sizes[combo.output as usize];
+        let amount = self.buffers.buffer_sizes[combo.child as usize];
         return SelfClosingBufferView{ buf_view: Some(staging_view), amount: amount as usize, buf: &self.buffers.staging(), func: |b: &[u8; size_of::<GpuBoard>()]| GpuBoard::from_bytes(*b)};
     }
 
     pub async fn get_output_evals<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<4, impl (Fn(&[u8; 4]) -> EvalScore)> {
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         command_encoder.copy_buffer_to_buffer(
-            &self.buffers.eval_buffers[combo.input as usize],
+            &self.buffers.eval_buffers[combo.parent as usize],
             0, // Source offset
             &self.buffers.eval_staging,
             0, // Destination offset
@@ -193,7 +193,7 @@ impl GpuChessEvaluator {
         
         let staging_view = self.buffers.eval_staging.slice(..).get_mapped_range();
 
-        let amount = self.buffers.buffer_sizes[combo.input as usize];
+        let amount = self.buffers.buffer_sizes[combo.parent as usize];
         return SelfClosingBufferView{
             buf_view: Some(staging_view),
             amount: amount as usize,
@@ -380,7 +380,7 @@ impl BoardLists {
         return Self {board_buffers, boards_per_buf, eval_buffers, buffer_size, staging, eval_staging, combo_cache: HashMap::default(), buffer_sizes: [0; 4]};
     }
 
-    pub fn create_combo(&self, input: u8, output: u8, engine: &GpuChessEvaluator) -> BufferCombo {
+    pub fn create_combo(&self, parent: u8, child: u8, engine: &GpuChessEvaluator) -> BufferCombo {
         let expansion_bind = engine.device.create_bind_group(
             &BindGroupDescriptor {
                 label: None,
@@ -388,11 +388,11 @@ impl BoardLists {
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer(self.board_buffers[input as usize].as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(self.board_buffers[parent as usize].as_entire_buffer_binding())
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Buffer(self.board_buffers[output as usize].as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
                     },
                     BindGroupEntry {
                         binding: 2,
@@ -417,11 +417,11 @@ impl BoardLists {
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Buffer(self.board_buffers[output as usize].as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
                     },
                     BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[input as usize].as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
                     },
                 ]
             }
@@ -438,15 +438,15 @@ impl BoardLists {
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Buffer(self.board_buffers[output as usize].as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
                     },
                     BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[output as usize].as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[child as usize].as_entire_buffer_binding())
                     },
                     BindGroupEntry {
                         binding: 3,
-                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[input as usize].as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
                     },
                 ]
             }
@@ -463,7 +463,7 @@ impl BoardLists {
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[input as usize].as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
                     },
                 ]
             }
@@ -474,17 +474,17 @@ impl BoardLists {
             eval_contract_bind,
             contract_bind,
             fill_max_bind,
-            input: input,
-            output: output,
+            parent,
+            child,
         };
     }
 
     pub fn get_in(&self, combo: &BufferCombo) -> &Buffer {
-        return &self.board_buffers[combo.input as usize];
+        return &self.board_buffers[combo.parent as usize];
     }
 
     pub fn get_out(&self, combo: &BufferCombo) -> &Buffer {
-        return &self.board_buffers[combo.output as usize];
+        return &self.board_buffers[combo.child as usize];
     }
 
     pub fn staging(&self) -> &Buffer {
@@ -493,8 +493,8 @@ impl BoardLists {
 }
 
 pub struct BufferCombo {
-    input: u8,
-    output: u8,
+    parent: u8,
+    child: u8,
     expansion_bind: BindGroup,
     eval_contract_bind: BindGroup,
     contract_bind: BindGroup,
