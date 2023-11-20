@@ -106,7 +106,14 @@ impl EvalScore {
         }
     }
 
+    /// The score in centipawns, with positive being good for white, and negative being good for black
     pub fn to_centipawn(&self) -> i64 {
         return (self.0) as i64;
+    }
+
+    /// The score in centipawns, relative to the specified side.
+    /// Positive numbers are good for the side specified, negative numbers are bad.
+    pub fn centipawn_relative(&self, side: Side) -> i64 {
+        return self.to_centipawn() * (if side == Side::White {1} else {-1});
     }
 }

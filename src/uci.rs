@@ -1,6 +1,6 @@
 use std::{io, sync::{atomic::{AtomicBool, AtomicU16, AtomicU64}, Mutex, Arc}, rc::Rc};
 
-use crate::chess::{GameState, Move};
+use crate::chess::{GameState, Move, EvalScore, Side};
 
 pub fn start_loop(engine: impl ThreadedEngine) -> ! {
     let mut buffer = String::new();
@@ -64,6 +64,7 @@ pub fn start_loop(engine: impl ThreadedEngine) -> ! {
                 }
 
                 let coms = Arc::new(UciCommunication {
+                    to_move: gamestate.as_ref().unwrap().to_move,
                     stopped: AtomicBool::new(false),
                     depth: AtomicU16::new(0),
                     nodes: AtomicU64::new(0),
@@ -88,6 +89,7 @@ pub fn start_loop(engine: impl ThreadedEngine) -> ! {
 }
 
 pub struct UciCommunication{
+    to_move: Side,
     stopped: AtomicBool,
     depth: AtomicU16,
     nodes: AtomicU64,
@@ -95,14 +97,14 @@ pub struct UciCommunication{
 }
 
 impl UciCommunication {
-    pub fn set_best(&self, m: Move, score: i64) {
+    pub fn set_best(&self, m: Move, score: EvalScore) {
         if self.is_stopped() {
             return;
         }
         *self.best.lock().unwrap() = Some(m);
         let depth = self.depth.load(std::sync::atomic::Ordering::Relaxed);
         let nodes = self.nodes.load(std::sync::atomic::Ordering::Relaxed);
-        println!("info score cp {score} depth {depth} nodes {nodes} pv {m}");
+        println!("info score cp {} depth {depth} nodes {nodes} pv {m}", score.to_centipawn());
     }
 
     pub fn report_depth_and_nodes(&self, depth: u16, nodes: u64) {

@@ -86,7 +86,7 @@ impl ThreadedEngine for MahEngine {
                     if EvalScore::better(&score, &best_score, start_side).is_gt() {
                         let best_move = board::find_move(&state.get_board(), &b).unwrap();
                         best_score = score;
-                        coms.set_best(best_move, score.to_centipawn());
+                        coms.set_best(best_move, score);
                     }
                 }
                 coms.stop();
