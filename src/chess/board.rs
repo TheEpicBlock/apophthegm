@@ -133,7 +133,7 @@ pub fn find_move(before: &impl Board, after: &impl Board) -> Result<Move, &'stat
     let Some(end_pos) = end_pos else { return Err("Couldn't find end"); };
 
     let mut promote = None;
-    if before.get(start_pos).unwrap().ty == PieceType::Pawn && end_pos.get_y() == 0 || end_pos.get_y() == 7 {
+    if before.get(start_pos).unwrap().ty == PieceType::Pawn && (end_pos.get_y() == 0 || end_pos.get_y() == 7) {
         promote = Some(after.get(end_pos).unwrap().ty);
     }
 
@@ -191,5 +191,17 @@ mod test {
         b.set(Location::new(0, 3), Some(piece));
 
         assert_eq!(find_move(&a, &b), Ok(Move(Location::new(0, 1), Location::new(0, 3), None)));
+    }
+
+    #[test]
+    fn move_last_rank() {
+        // Make sure that the bot doesn't think that everything that moves to the last rank is doing a promotion
+        let mut a = StandardBoard::new_empty();
+        let mut b = StandardBoard::new_empty();
+        let piece = Piece::new(Side::White, PieceType::Queen);
+        a.set(Location::new(0, 6), Some(piece));
+        b.set(Location::new(0, 7), Some(piece));
+
+        assert_eq!(find_move(&a, &b), Ok(Move(Location::new(0, 6), Location::new(0, 7), None)));
     }
 }
