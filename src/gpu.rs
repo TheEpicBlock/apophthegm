@@ -62,6 +62,7 @@ impl GpuChessEvaluator {
         self.queue.write_buffer(&self.global_data, 4, &data);
     }
 
+    /// Creates children based on parents
     pub async fn run_expansion(&mut self, combo: &BufferCombo, to_move: Side) {
         self.device.start_capture();
         let parent_size = self.buffers.buffer_sizes[combo.parent as usize];
@@ -72,13 +73,6 @@ impl GpuChessEvaluator {
         pass_encoder.set_bind_group(0, &combo.expansion_bind, &[]);
         pass_encoder.dispatch_workgroups(ceil_div(parent_size, WORKGROUP_SIZE), 1, 1);
         drop(pass_encoder);
-        command_encoder.copy_buffer_to_buffer(
-            &self.out_index,
-            0, // Source offset
-            &self.global_data,
-            0, // Destination offset
-            1 * size_of::<u32>() as u64,
-        );
         command_encoder.copy_buffer_to_buffer(
             &self.out_index,
             0, // Source offset
@@ -104,23 +98,23 @@ impl GpuChessEvaluator {
         self.device.stop_capture();
     }
 
+    /// Takes in the children, runs the eval on each of them, and then outputs an eval for each of the parents
     pub async fn run_eval_contract(&mut self, combo: &BufferCombo, to_move: Side, move_num: u32) {
         self.device.start_capture();
         let parent_size = self.buffers.buffer_sizes[combo.parent as usize]; // For the output evals
         let child_size = self.buffers.buffer_sizes[combo.child as usize]; // For the input boards
-        self.set_all_global_data(parent_size, to_move, move_num);
+        self.set_all_global_data(child_size, to_move, move_num);
 
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         if to_move == Side::Black {
             let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
             pass_encoder.set_pipeline(&self.fill_max_shader.1);
             pass_encoder.set_bind_group(0, &combo.fill_max_bind, &[]);
-            pass_encoder.dispatch_workgroups(ceil_div(parent_size, WORKGROUP_SIZE), 1, 1);
+            pass_encoder.dispatch_workgroups(ceil_div(child_size, WORKGROUP_SIZE), 1, 1);
             drop(pass_encoder);
         } else {
-            command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.parent as usize], 0, Some(NonZeroU64::new(parent_size as u64).unwrap()));
+            command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.parent as usize], 0, None);
         }
-        self.set_all_global_data(child_size, to_move, move_num);
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.eval_contract_shader.1);
         pass_encoder.set_bind_group(0, &combo.eval_contract_bind, &[]);
@@ -130,6 +124,7 @@ impl GpuChessEvaluator {
         self.device.stop_capture();
     }
 
+    /// Calculates parent evals based on child evals
     pub async fn run_contract(&mut self, combo: &BufferCombo, to_move: Side, move_num: u32) {
         self.device.start_capture();
         let parent_size = self.buffers.buffer_sizes[combo.parent as usize]; // For the output evals
