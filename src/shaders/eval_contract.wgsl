@@ -42,7 +42,7 @@ fn evalPosition(board: ptr<function, Board>) -> i32 {
       var piece_score = i32(0);
       let piece_type = piece & 0x7u;
       if (piece_type == Pawn) {
-        piece_score = 1;
+        piece_score = 100;
         if ((y == 3u || y == 4u) && (x == 3u || x == 4u)) {
           piece_score = 150;
         }
