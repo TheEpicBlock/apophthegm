@@ -22,16 +22,16 @@ fn getPiece(board: ptr<function, Board>, x: u32, y: u32) -> u32 {
 fn getPrev(board: ptr<function, Board>, index: u32) -> u32 {
   switch index {
     case 0u: {
-      return (*board).pieces[8] & (0xFFu);
+      return (*board).pieces[8] & (0xFFFFu);
     }
     case 1u: {
-      return ((*board).pieces[8] & (0xFFu << 16u)) >> 16u;
+      return ((*board).pieces[8] & (0xFFFFu << 16u)) >> 16u;
     }
     case 2u: {
-      return (*board).pieces[9] & (0xFFu);
+      return (*board).pieces[9] & (0xFFFFu);
     }
     case 3u: {
-      return ((*board).pieces[9] & (0xFFu << 16u)) >> 16u;
+      return ((*board).pieces[9] & (0xFFFFu << 16u)) >> 16u;
     }
     default: {
       return 0u;
