@@ -103,6 +103,7 @@ impl GpuChessEvaluator {
         self.device.start_capture();
         let parent_size = self.buffers.buffer_sizes[combo.parent as usize]; // For the output evals
         let child_size = self.buffers.buffer_sizes[combo.child as usize]; // For the input boards
+        assert!(child_size >= parent_size);
         self.set_all_global_data(child_size, to_move, move_num);
 
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
@@ -110,7 +111,7 @@ impl GpuChessEvaluator {
             let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
             pass_encoder.set_pipeline(&self.fill_max_shader.1);
             pass_encoder.set_bind_group(0, &combo.fill_max_bind, &[]);
-            pass_encoder.dispatch_workgroups(ceil_div(child_size, WORKGROUP_SIZE), 1, 1);
+            pass_encoder.dispatch_workgroups(ceil_div(parent_size, WORKGROUP_SIZE), 1, 1);
             drop(pass_encoder);
         } else {
             command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.parent as usize], 0, None);
@@ -129,7 +130,8 @@ impl GpuChessEvaluator {
         self.device.start_capture();
         let parent_size = self.buffers.buffer_sizes[combo.parent as usize]; // For the output evals
         let child_size = self.buffers.buffer_sizes[combo.child as usize]; // For the input boards
-        self.set_all_global_data(parent_size, to_move, move_num);
+        assert!(child_size >= parent_size);
+        self.set_all_global_data(child_size, to_move, move_num);
 
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         if to_move == Side::Black {

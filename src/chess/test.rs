@@ -302,6 +302,7 @@ async fn test_eval() {
     let best = evals.iter().max_by(|a, b| EvalScore::better(a, b, Side::White)).unwrap();
     let worst = evals.iter().min_by(|a, b| EvalScore::better(a, b, Side::White)).unwrap();
     assert!(best.to_centipawn() > worst.to_centipawn());
+    assert_eq!(evals, [EvalScore::from(0), EvalScore::from(50)]); // Might change in the future
 
     // Test contract
     engine.run_contract(&pass_1, Side::White, 0).await;
