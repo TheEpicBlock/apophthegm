@@ -4,6 +4,7 @@
 #![feature(slice_pattern)]
 #![feature(impl_trait_in_assoc_type)]
 #![feature(never_type)]
+#![feature(let_chains)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
 

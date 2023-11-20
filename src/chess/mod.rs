@@ -5,6 +5,7 @@ pub mod piece;
 pub mod test;
 
 use std::fmt::Debug;
+use std::ops::{AddAssign, Add};
 use std::{fmt::Display, cmp::Ordering};
 use std::ascii;
 
@@ -26,6 +27,14 @@ impl Display for Location {
 impl Debug for Location {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.x_as_char(), self.get_y()+1) // +1 because of 0-indexing
+    }
+}
+
+impl Add<(i16, i16)> for Location {
+    type Output = Location;
+
+    fn add(self, rhs: (i16, i16)) -> Self::Output {
+        Location::new((self.get_x() as i16 + rhs.0) as u8, (self.get_y() as i16 + rhs.1) as u8)
     }
 }
 

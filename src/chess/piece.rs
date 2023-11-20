@@ -42,7 +42,7 @@ impl Debug for Piece {
     }
 }
 
-#[derive(Clone, Copy, Enum, PartialEq, Eq)]
+#[derive(Clone, Copy, Enum, PartialEq, Eq, Debug)]
 pub enum Side {
     Black,
     White

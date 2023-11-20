@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{Write, Debug};
 use std::ops::{Index, IndexMut};
 use std::{fmt::Display, ascii, mem::size_of, default};
 
@@ -13,7 +13,7 @@ pub trait Board: Display {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct StandardBoard([Option<Piece>; 64]);
 
 impl Board for StandardBoard {
@@ -151,6 +151,17 @@ fn display(input: &impl Board, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Res
     Ok(())
 }
 
+impl Debug for GpuBoard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        display(self, f)?;
+        Ok(())
+    }
+}
+impl Debug for StandardBoard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        display(self, f)
+    }
+}
 impl Display for GpuBoard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         display(self, f)?;
@@ -183,7 +194,7 @@ mod test {
     }
 
     #[test]
-    fn move_normal() {
+    fn find_move_normal() {
         let mut a = StandardBoard::new_empty();
         let mut b = StandardBoard::new_empty();
         let piece = Piece::new(Side::White, PieceType::Pawn);
@@ -194,7 +205,7 @@ mod test {
     }
 
     #[test]
-    fn move_last_rank() {
+    fn find_move_last_rank() {
         // Make sure that the bot doesn't think that everything that moves to the last rank is doing a promotion
         let mut a = StandardBoard::new_empty();
         let mut b = StandardBoard::new_empty();
