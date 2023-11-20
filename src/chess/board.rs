@@ -97,7 +97,8 @@ impl GpuBoard {
         self.0
     }
 
-    pub fn getPrev(&self) -> usize {
+    // Used for debugging
+    pub fn get_prev(&self) -> usize {
         return u32::from_le_bytes(self.0.as_chunks::<{size_of::<u32>()}>().0[8 as usize]) as usize;
     }
 }
