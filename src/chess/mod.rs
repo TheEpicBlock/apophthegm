@@ -66,6 +66,14 @@ impl Location {
     pub fn all() -> impl Iterator<Item = Location> {
         (0..64).into_iter().map(|i| Location(i))
     }
+
+    pub fn with_y(&self, y: u8) -> Self {
+        Location::new(self.get_x(), y)
+    }
+
+    pub fn with_x(&self, x: u8) -> Self {
+        Location::new(x, self.get_y())
+    }
 }
 
 // Todo, encode promotion
