@@ -4,6 +4,7 @@ pub mod piece;
 #[cfg(test)]
 pub mod test;
 
+use std::fmt::Debug;
 use std::{fmt::Display, cmp::Ordering};
 use std::ascii;
 
@@ -17,6 +18,12 @@ pub use board::{Board, GpuBoard, StandardBoard};
 pub struct Location(u8);
 
 impl Display for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.x_as_char(), self.get_y()+1) // +1 because of 0-indexing
+    }
+}
+
+impl Debug for Location {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.x_as_char(), self.get_y()+1) // +1 because of 0-indexing
     }
@@ -53,7 +60,7 @@ impl Location {
 }
 
 // Todo, encode promotion
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Move(pub Location, pub Location, pub Option<PieceType>);
 
 impl Display for Move {
