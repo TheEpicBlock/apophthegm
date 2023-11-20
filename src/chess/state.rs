@@ -101,6 +101,11 @@ impl GameState {
         let prev = self.get(movee.0);
         self.set(movee.0, None);
         self.set(movee.1, prev);
+        if let Some(promotion) = movee.2 {
+            if let Some(prev_piece) = prev {
+                self.set(movee.1, Some(Piece { ty: promotion, side: prev_piece.side}));
+            }
+        }
         self.to_move = self.to_move.opposite();
     }
 }

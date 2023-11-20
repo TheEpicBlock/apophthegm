@@ -15,15 +15,7 @@ impl Piece {
 
     pub fn from_fen_char(char: char) -> Self {
         let side = if char.is_ascii_uppercase() { Side::White } else { Side::Black };
-        let piece = match char.to_ascii_uppercase() {
-            'P' => PieceType::Pawn,
-            'N' => PieceType::Horsy,
-            'B' => PieceType::Bishop,
-            'R' => PieceType::Rook,
-            'Q' => PieceType::Queen,
-            'K' => PieceType::King,
-            _ => panic!("Invalid Fen piece {}", char),
-        };
+        let piece = PieceType::from_char(char);
         return Piece::new(side, piece);
     }
 
@@ -118,6 +110,18 @@ impl PieceType {
             PieceType::Rook => 'R',
             PieceType::Horsy => 'N',
             PieceType::Pawn => 'P',
+        }
+    }
+
+    pub fn from_char(char: char) -> Self {
+        match char.to_ascii_uppercase() {
+            'P' => PieceType::Pawn,
+            'N' => PieceType::Horsy,
+            'B' => PieceType::Bishop,
+            'R' => PieceType::Rook,
+            'Q' => PieceType::Queen,
+            'K' => PieceType::King,
+            _ => panic!("Invalid char {}", char),
         }
     }
 }

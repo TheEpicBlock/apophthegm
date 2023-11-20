@@ -132,7 +132,12 @@ pub fn find_move(before: &impl Board, after: &impl Board) -> Result<Move, &'stat
     }
     let Some(end_pos) = end_pos else { return Err("Couldn't find end"); };
 
-    return Ok(Move(start_pos, end_pos));
+    let mut promote = None;
+    if before.get(start_pos).unwrap().ty == PieceType::Pawn {
+        promote = Some(after.get(end_pos).unwrap().ty);
+    }
+
+    return Ok(Move(start_pos, end_pos, promote));
 }
 
 fn display(input: &impl Board, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

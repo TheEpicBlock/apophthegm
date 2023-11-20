@@ -54,7 +54,7 @@ impl Location {
 
 // Todo, encode promotion
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Move(pub Location, pub Location);
+pub struct Move(pub Location, pub Location, pub Option<PieceType>);
 
 impl Display for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -65,9 +65,11 @@ impl Display for Move {
 impl Move {
     // Parses long algebraic notation, compliant with uci
     pub fn from_str(str: &str) -> Move {
-        assert_eq!(str.len(), 4);
+        assert!(str.len() <= 5);
+        assert!(str.len() >= 4);
         let str: Vec<_> = str.chars().collect();
-        return Move(Location::from_letters(str[0], str[1]), Location::from_letters(str[2], str[3]));
+        let promote = if str.len() == 5 { Some(PieceType::from_char(str[4]))} else {None};
+        return Move(Location::from_letters(str[0], str[1]), Location::from_letters(str[2], str[3]), promote);
     }
 }
 
