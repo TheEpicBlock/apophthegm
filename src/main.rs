@@ -33,25 +33,6 @@ const BUFFER_SIZE: u64 = size_of::<GpuBoard>() as u64 * BOARDS_IN_BUF;
 #[tokio::main]
 async fn main() {
     env_logger::init();
-
-    // let board = GameState::from_fen("8/5P2/8/8/6k1/8/1pQ3K1/8 w - - 0 1");
-    // let mut engine = init_gpu_evaluator(&init_adapter().await).await;
-    // let pass_1 = engine.create_combo(0, 1);
-    // let pass_2 = engine.create_combo(1, 2);
-    // let pass_3 = engine.create_combo(2, 3);
-    // engine.set_input(&pass_1, [convert(&board.get_board())]).await;
-    // engine.run_expansion(&pass_1, Side::White).await;
-    // engine.run_expansion(&pass_2, Side::Black).await;
-    // engine.run_expansion(&pass_3, Side::White).await;
-    // engine.run_eval_contract(&pass_3, Side::White, 0).await;
-    // engine.run_contract(&pass_2, Side::Black, 0).await;
-    // let bout = engine.get_output_boards(&pass_1).await;
-    // let eout = engine.get_output_evals(&pass_2).await;
-    // Iterator::zip(bout.iter(), eout.iter()).for_each(|(b, e)| {
-    //     println!("{b}=={}", e.to_centipawn());
-    // });
-                    
-
     uci::start_loop(MahEngine);
 }
 
