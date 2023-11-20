@@ -104,7 +104,7 @@ impl UciCommunication {
         *self.best.lock().unwrap() = Some(m);
         let depth = self.depth.load(std::sync::atomic::Ordering::Relaxed);
         let nodes = self.nodes.load(std::sync::atomic::Ordering::Relaxed);
-        println!("info score cp {} depth {depth} nodes {nodes} pv {m}", score.to_centipawn());
+        println!("info score cp {} depth {depth} nodes {nodes} pv {m}", score.centipawn_relative(self.to_move));
     }
 
     pub fn report_depth_and_nodes(&self, depth: u16, nodes: u64) {
