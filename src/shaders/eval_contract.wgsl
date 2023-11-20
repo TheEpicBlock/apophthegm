@@ -49,8 +49,9 @@ fn evalPosition(board: ptr<function, Board>) -> i32 {
       } else if (piece_type == Horsy || piece_type == Bishop) {
         if (y == 0u || y == 7u) {
           piece_score = 250; // encourage developing pieces
+        } else {
+          piece_score = 300;
         }
-        piece_score = 300;
       } else if (piece_type == Rook) {
         piece_score = 500;
       } else if (piece_type == Queen) {
