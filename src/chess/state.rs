@@ -124,6 +124,27 @@ impl GameState {
             }
         }
 
+        let old_en_passant_sq = self.en_passant_sq;
+        self.en_passant_sq = None;
+
+        if let Some(piece) = prev && piece.ty == PieceType::Pawn {
+            if Some(m.1) == old_en_passant_sq {
+                // En-passant was played, need to remove the capture pawn
+                let captured_location = match piece.side {
+                    Side::Black => old_en_passant_sq.unwrap() + (0, 1),
+                    Side::White => old_en_passant_sq.unwrap() + (0, -1),
+                };
+                self.set(captured_location, None);
+            }
+            if u8::abs_diff(m.0.get_y(), m.1.get_y()) == 2 {
+                // A pawn was moved from the starting rank, need to update the en-passant square
+                match piece.side {
+                    Side::Black => self.en_passant_sq = Some(m.0 + (0, -1)),
+                    Side::White => self.en_passant_sq = Some(m.0 + (0, 1)),
+                }
+            }
+        }
+
         self.set(m.0, None);
         self.set(m.1, prev);
         if let Some(promotion) = m.2 {
@@ -188,5 +209,14 @@ mod test {
         let mut state = GameState::from_fen("r3kbnr/ppp1qppp/n2p4/4p3/4P1Q1/2NPB3/PPP2PPP/2KR1BNR b Kkq - 0 1");
         state.play(Move::from_str("e8a8"));
         assert_eq!(state, GameState::from_fen("2kr1bnr/ppp1qppp/n2p4/4p3/4P1Q1/2NPB3/PPP2PPP/2KR1BNR w Kk - 0 1"));
+    }
+
+    #[test]
+    fn play_en_passant() {
+        let mut state = GameState::from_fen("8/8/8/8/2p5/8/1P3K1k/8 w - - 0 1");
+        state.play(Move::from_str("b2b4"));
+        assert_eq!(state, GameState::from_fen("8/8/8/8/1Pp5/8/5K1k/8 b - b3 0 1"));
+        state.play(Move::from_str("c4b3"));
+        assert_eq!(state, GameState::from_fen("8/8/8/8/8/1p6/5K1k/8 w - - 0 2"));
     }
 }
