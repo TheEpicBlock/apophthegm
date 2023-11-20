@@ -58,7 +58,10 @@ pub struct Move(pub Location, pub Location, pub Option<PieceType>);
 
 impl Display for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.0, self.1)
+        match self.2 {
+            Some(promote) => write!(f, "{}{}{}", self.0, self.1, promote.to_char()),
+            None => write!(f, "{}{}", self.0, self.1),
+        }
     }
 }
 
