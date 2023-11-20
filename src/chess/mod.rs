@@ -71,7 +71,7 @@ impl Move {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct EvalScore(i32);
 
 impl EvalScore {
