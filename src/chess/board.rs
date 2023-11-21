@@ -3,6 +3,8 @@ use std::ops::{Index, IndexMut};
 use std::{fmt::Display, ascii, mem::size_of, default};
 use enum_map::enum_map;
 
+use crate::buffers::BufferData;
+
 use super::piece::PieceExt;
 use super::{Location, Piece, Side, PieceType, Move};
 
@@ -144,6 +146,10 @@ impl PartialEq<Self> for GpuBoard {
     fn eq(&self, other: &Self) -> bool {
         self.0[0..(8*4)] == other.0[0..(8*4)]
     }
+}
+
+impl BufferData for GpuBoard {
+    const SIZE: usize = size_of::<Self>();
 }
 
 impl Board for GpuBoard {

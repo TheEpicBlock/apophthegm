@@ -1,5 +1,7 @@
 use wgpu::{Device, PipelineLayoutDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, ComputePipeline, include_wgsl, ShaderModuleDescriptor, BindGroupLayout};
 
+pub const WORKGROUP_SIZE: u64 = 64;
+
 macro_rules! include_shader {
     ($($token:tt)*) => {
         ShaderModuleDescriptor {

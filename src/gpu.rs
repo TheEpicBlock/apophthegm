@@ -11,6 +11,7 @@ use log::info;
 use tokio::join;
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends, Buffer, BindGroup, ComputePipeline, BufferSlice, MapMode, Device, Queue, SubmissionIndex, BufferView, Adapter};
 
+use crate::buffers::BufferManager;
 use crate::chess::{GpuBoard, Side, EvalScore};
 use crate::shaders::{Shader, self};
 use crate::wgpu_util::SliceExtension;
@@ -18,7 +19,7 @@ use crate::wgpu_util::SliceExtension;
 const WORKGROUP_SIZE: u64 = 64;
 
 pub struct GpuChessEvaluator {
-    device: Device,
+    device: Rc<Device>,
     buffers: BoardLists,
     queue: Queue,
     global_data: Buffer,
@@ -279,14 +280,28 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
         }
     );
 
-    let buffers = BoardLists::init(&device);
-
     let expand_shader = shaders::expand(&device);
     let eval_contract_shader = shaders::eval_contract(&device);
     let contract_shader = shaders::contract(&device);
     let fill_max_shader = shaders::fill_max(&device);
 
-    return GpuChessEvaluator { device, buffers, queue, global_data, just_zero, out_index, out_index_staging, expand_shader, eval_contract_shader, contract_shader, fill_max_shader };
+    let device_rc = Rc::new(device);
+
+    let buffers = BoardLists::init(device_rc.clone());
+
+    return GpuChessEvaluator {
+        device: device_rc,
+        buffers,
+        queue,
+        global_data,
+        just_zero,
+        out_index,
+        out_index_staging,
+        expand_shader,
+        eval_contract_shader,
+        contract_shader,
+        fill_max_shader
+    };
 }
 
 pub async fn init_adapter() -> Adapter {
@@ -305,6 +320,7 @@ pub async fn init_adapter() -> Adapter {
 }
 
 pub struct BoardLists {
+    boards: BufferManager<GpuBoard>,
     board_buffers: [Buffer; 4],
     buffer_sizes: [u32; 4],
     eval_buffers: [Buffer; 4],
@@ -317,8 +333,8 @@ pub struct BoardLists {
     combo_cache: HashMap<(u8, u8), BufferCombo>,
 }
 
-impl BoardLists {
-    pub fn init(device: &Device) -> Self {
+impl<'dev> BoardLists {
+    pub fn init(device: Rc<Device>) -> Self {
         // Buffer size calculations
         let max_buffer_size = u64::min(device.limits().max_buffer_size, device.limits().max_storage_buffer_binding_size as u64);
         let max_boards_per_buf = max_buffer_size / size_of::<GpuBoard>() as u64;
@@ -374,7 +390,9 @@ impl BoardLists {
             }
         );
 
-        return Self {board_buffers, boards_per_buf, eval_buffers, buffer_size, staging, eval_staging, combo_cache: HashMap::default(), buffer_sizes: [0; 4]};
+        let boards = BufferManager::create(device, boards_per_buf, "Board storage");
+
+        return Self {boards, board_buffers, boards_per_buf, eval_buffers, buffer_size, staging, eval_staging, combo_cache: HashMap::default(), buffer_sizes: [0; 4]};
     }
 
     pub fn create_combo(&self, parent: u8, child: u8, engine: &GpuChessEvaluator) -> BufferCombo {

@@ -10,6 +10,8 @@
 
 mod chess;
 mod gpu;
+mod gpu_tree;
+mod buffers;
 pub(crate) mod wgpu_util;
 mod shaders;
 mod uci;
