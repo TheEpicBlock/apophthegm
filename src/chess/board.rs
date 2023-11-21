@@ -1,7 +1,9 @@
 use std::fmt::{Write, Debug};
 use std::ops::{Index, IndexMut};
 use std::{fmt::Display, ascii, mem::size_of, default};
+use enum_map::enum_map;
 
+use super::piece::PieceExt;
 use super::{Location, Piece, Side, PieceType, Move};
 
 pub trait Board: Display {
@@ -10,6 +12,96 @@ pub trait Board: Display {
     fn get(&self, index: Location) -> Option<Piece>;
 
     fn set(&mut self, index: Location, piece: Option<Piece>);
+
+    fn is_valid(&self, last_moved: Side) -> bool {
+        let mut kings = enum_map!{ _ => 0};
+
+        for loc in Location::all() {
+            if let Some(king) = self.get(loc).get_as(PieceType::King) {
+                kings[king.side] += 1;
+                if king.side == last_moved {
+                    // The king that last moved cannot be in check
+                    let horizontal_dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+                    for d in horizontal_dirs {
+                        for i in 1.. {
+                            if let Some(nloc) = loc.try_add(d.0 * i, d.1 * i) {
+                                if let Some(p) = self.get(nloc) {
+                                    if p.side == king.side {
+                                        break;
+                                    } else if p.ty == PieceType::Rook || p.ty == PieceType::Queen {
+                                        return false;
+                                    } else if i == 1 && p.ty == PieceType::King {
+                                        return false;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+    
+                    let horizonotal_dirs = [(1, 1), (-1, 1), (-1, -1), (1, -1)];
+                    for d in horizonotal_dirs {
+                        for i in 1.. {
+                            if let Some(nloc) = loc.try_add(d.0 * i, d.1 * i) {
+                                if let Some(p) = self.get(nloc) {
+                                    if p.side == king.side {
+                                        break;
+                                    } else if p.ty == PieceType::Bishop || p.ty == PieceType::Queen {
+                                        return false;
+                                    } else if i == 1 && p.ty == PieceType::King {
+                                        return false;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+    
+                    let horse_pos = [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (-1, 2), (1, -2), (-1, 2)];
+                    for dloc in horse_pos {
+                        if let Some(nloc) = loc.try_add(dloc.0, dloc.1) {
+                            if let Some(horse) = self.get(nloc).get_as(PieceType::Horsy) {
+                                if horse.side != king.side {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+
+                    let dy = if king.side == Side::Black { -1 } else { 1 };
+                    if let Some(nloc) = loc.try_add(1, dy) {
+                        if let Some(pawn) = self.get(nloc).get_as(PieceType::Pawn) {
+                            if pawn.side != king.side {
+                                return false;
+                            }
+                        }
+                    }
+                    if let Some(nloc) = loc.try_add(-1, dy) {
+                        if let Some(pawn) = self.get(nloc).get_as(PieceType::Pawn) {
+                            if pawn.side != king.side {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if kings[Side::White] != 1 {
+            return false;
+        }
+        if kings[Side::Black] != 1 {
+            return false;
+        }
+
+        return true;
+    }
 }
 
 #[repr(transparent)]
@@ -176,7 +268,7 @@ impl Display for StandardBoard {
 
 #[cfg(test)]
 mod test {
-    use crate::chess::{Location, Move, Piece, Side, PieceType, board::{StandardBoard, find_move}};
+    use crate::chess::{Location, Move, Piece, Side, PieceType, board::{StandardBoard, find_move}, GameState};
 
     use super::{GpuBoard, Board};
 
@@ -214,5 +306,34 @@ mod test {
         b.set(Location::new(0, 7), Some(piece));
 
         assert_eq!(find_move(&a, &b), Ok(Move(Location::new(0, 6), Location::new(0, 7), None)));
+    }
+
+    #[test]
+    fn board_valid() {
+        fn check(str: &str, exp: bool) {
+            let state = GameState::from_fen(str);
+            assert_eq!(state.get_board().is_valid(state.to_move.opposite()), exp);
+        }
+        check("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", true);
+        // Not enough kings
+        check("8/8/8/8/8/8/k7/8 w KQkq - 0 1", false);
+        check("8/8/8/8/8/8/k7/8 b KQkq - 0 1", false);
+        
+        // White to move, and it should move out of check
+        check("7k/2r5/8/8/8/2K5/8/8 w - - 0 1", true);
+        // Black to move, and black can now capture the king which is illegal
+        check("7k/2r5/8/8/8/2K5/8/8 b - - 0 1", false);
+
+        check("8/5k2/8/2p5/1K6/8/8/8 b - - 0 1", false); // Black can capture with pawn
+        check("8/5k2/8/8/1K3q2/8/8/8 b - - 0 1", false); // Black can capture with queen
+        check("8/5k2/3q4/8/1K6/8/8/8 b - - 0 1", false); // Black can capture with queen
+        check("8/5k2/3b4/8/1K6/8/8/8 b - - 0 1", false); // Black can capture with bishop
+        check("8/5k2/8/8/1K3Q2/8/8/8 w - - 0 1", false); // White can capture with queen
+        check("8/8/5k2/3N4/1K6/8/8/8 w - - 0 1", false); // White can capture with horse
+
+        check("8/4P3/5k2/8/1K6/8/8/8 w - - 0 1", true); // White can *not* capture with pawn
+        check("8/1kp3R1/8/8/8/8/8/7K w - - 0 1", true); // White can *not* capture with the rook, a black pawn is in the way
+        check("8/1kP3R1/8/8/8/8/8/7K w - - 0 1", true); // White can *not* capture with the rook, a white pawn is in the way
+        
     }
 }

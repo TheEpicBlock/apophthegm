@@ -125,3 +125,25 @@ impl PieceType {
         }
     }
 }
+
+pub trait PieceExt {
+    fn get_as(&self, ty: PieceType) -> Option<Piece>;
+
+    fn is(&self, ty: PieceType) -> bool;
+}
+
+impl PieceExt for Option<Piece> {
+    fn get_as(&self, ty: PieceType) -> Option<Piece> {
+        self.map_or(None, |p| {
+            if p.ty == ty {
+                Some(p)
+            } else {
+                None
+            }
+        })
+    }
+
+    fn is(&self, ty: PieceType) -> bool {
+        self.is_some_and(|p| p.ty == ty)
+    }
+}

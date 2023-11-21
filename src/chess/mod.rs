@@ -40,8 +40,8 @@ impl Add<(i16, i16)> for Location {
 
 impl Location {
     pub fn new(x: u8, y: u8) -> Self {
-        assert!(x < 8);
-        assert!(y < 8);
+        assert!(x < 8, "{x} >= 8");
+        assert!(y < 8, "{y} >= 8");
         Self((x << 3) | (y & 0x07))
     }
 
@@ -73,6 +73,16 @@ impl Location {
 
     pub fn with_x(&self, x: u8) -> Self {
         Location::new(x, self.get_y())
+    }
+
+    pub fn try_add(&self, dx: i16, dy: i16) -> Option<Self> {
+        let nx = self.get_x() as i16 + dx;
+        let ny = self.get_y() as i16 + dy;
+        if nx >= 8 || ny >= 8 || nx < 0 || ny < 0 {
+            return None;
+        } else {
+            return Some(Location::new(nx as u8, ny as u8));
+        }
     }
 }
 
