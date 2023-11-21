@@ -17,7 +17,7 @@ mod uci;
 use core::slice::SlicePattern;
 use std::{mem::size_of, thread, time::Duration, rc::Rc, sync::Arc};
 
-use chess::EvalScore;
+use chess::{EvalScore, Board};
 use float_ord::FloatOrd;
 use gpu::{init_gpu_evaluator, GpuChessEvaluator};
 use tokio::runtime::Handle;
@@ -62,6 +62,9 @@ impl ThreadedEngine for MahEngine {
                 coms.report_depth_and_nodes(1, first_boards.len() as u64);
                 let mut best_score = EvalScore::worst(start_side);
                 for b in first_boards {
+                    if !b.is_valid(start_side) {
+                        continue;
+                    }
                     engine.set_input(&pass_1, [b]).await;
                     engine.run_expansion(&pass_1, start_side.opposite()).await;
                     coms.report_depth_and_nodes(2, engine.get_out_boards_len(&pass_1));
