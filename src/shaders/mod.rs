@@ -288,7 +288,7 @@ impl ExpansionBindGroupMngr {
                 ]
             }
         );
-        let offsets = [buffers.input.start() as u32, buffers.output.start() as u32];
+        let offsets = [0,0];
         return BindOut(expansion_bind, offsets);
     }
 }

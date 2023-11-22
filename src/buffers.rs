@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, rc::Rc, sync::atomic::AtomicI32};
+use std::{marker::PhantomData, rc::Rc, sync::atomic::AtomicI32, ops::{RangeBounds, Range}};
 
 use log::info;
 use wgpu::{Buffer, Device, BufferUsages, BufferDescriptor, BufferAddress, MapMode, BufferAsyncError, BufferView, CommandEncoderDescriptor, Queue};
@@ -17,7 +17,7 @@ pub struct BufferManager<ElementType: BufferData> {
 
 struct BufData {
     buffer: Buffer,
-    allocated_elements: BufferAddress,
+    allocated_bytes: BufferAddress,
     allocations: u64,
     times_mapped: AtomicI32,
 }
@@ -26,6 +26,7 @@ pub struct AllocToken<T: BufferData> {
     buffer_index: usize,
     offset: BufferAddress,
     len: u64,
+    bytes_len: u64,
     a: PhantomData<T>
 }
 
@@ -57,7 +58,7 @@ impl<T: BufferData> BufferManager<T> {
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             }),
-            allocated_elements: 0,
+            allocated_bytes: 0,
             allocations: 0,
             times_mapped: AtomicI32::new(0),
         });
@@ -66,10 +67,13 @@ impl<T: BufferData> BufferManager<T> {
 
     /// Allocates a buffer,
     /// the size is measured in number of elements
-    pub fn allocate(& mut self, size: u64) -> AllocToken<T> {
+    pub fn allocate(&mut self, size: u64) -> AllocToken<T> {
+        let bytes_size = size * T::SIZE as u64;
+
         let buf_index = self.buffers.iter().enumerate().find(|(_, bufdata)| {
-            let left = self.max_elements_per_buf - bufdata.allocated_elements;
-            left >= size
+            let bytes_left = self.max_bytes_per_buf - bufdata.allocated_bytes;
+            bytes_left >= bytes_size;
+            false
         }).map(|(i, _)| i).unwrap_or_else(|| {
             let new_index = self.new_buffer();
             new_index
@@ -77,14 +81,19 @@ impl<T: BufferData> BufferManager<T> {
 
         let buf = &mut self.buffers[buf_index];
 
-        let offset = buf.allocated_elements;
         buf.allocations += 1;
-        buf.allocated_elements += size;
+        let offset = buf.allocated_bytes;
+        let mut end = buf.allocated_bytes + size;
+        // Align end
+        let alignment = self.device.limits().min_storage_buffer_offset_alignment as u64;
+        end = end / alignment + if end % alignment == 0 { 0 } else { alignment }; 
+        buf.allocated_bytes = end;
 
         AllocToken {
             buffer_index: buf_index,
             offset,
             len: size,
+            bytes_len: bytes_size,
             a: PhantomData::default(),
         }
     }
@@ -93,11 +102,19 @@ impl<T: BufferData> BufferManager<T> {
         let buf = &mut self.buffers[token.buffer_index];
         buf.allocations -= 1;
         if buf.allocations == 0 {
-            buf.allocated_elements = 0;
+            buf.allocated_bytes = 0;
         }
     }
 
-    pub async fn view(&self, queue: &Queue, token: &AllocToken<T>) -> Result<BufView<'_, T>, BufferAsyncError> {
+    pub async fn view(&self, queue: &Queue, token: &AllocToken<T>, bounds: Range<BufferAddress>) -> Result<BufView<'_, T>, BufferAsyncError> {
+        assert!((0..token.len()).contains(&bounds.start));
+        assert!((0..token.len()).contains(&bounds.end));
+        let bound_len = bounds.end-bounds.start;
+
+        if bound_len == 0 {
+            return Ok(BufView::Empty);
+        }
+
         let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         command_encoder.copy_buffer_to_buffer(
             &token.buffer(self),
@@ -109,13 +126,13 @@ impl<T: BufferData> BufferManager<T> {
         queue.submit([command_encoder.finish()]);
 
         let buf = &self.buffers[token.buffer_index];
-        let buf_slice = buf.buffer.slice(token.start()..token.end());
+        let buf_slice = self.staging.slice((token.start()+bounds.start)..(token.start()+bound_len*T::SIZE as u64));
         buf.times_mapped.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         buf_slice.map_buffer(&self.device, MapMode::Read).await?;
         let view = buf_slice.get_mapped_range();
-        Ok(BufView {
+        Ok(BufView::Normal {
             wgpu_view: Some(view),
-            buffer: &buf.buffer,
+            buffer: &self.staging,
             counter: &buf.times_mapped,
             a: PhantomData::default(),
         })
@@ -144,7 +161,7 @@ impl<T> AllocToken<T> where T: BufferData {
 
     /// The length in bytes
     pub fn byte_len(&self) -> u64 {
-        self.len * T::SIZE as u64
+        self.bytes_len
     }
 }
 
@@ -152,41 +169,59 @@ pub trait BufferData {
     const SIZE: usize;
 }
 
-pub struct BufView<'a, T: BufferData> {
-    wgpu_view: Option<BufferView<'a>>,
-    buffer: &'a Buffer,
-    counter: &'a AtomicI32,
-    a: PhantomData<T>,
+pub enum BufView<'a, T: BufferData> {
+    Empty,
+    Normal {
+        wgpu_view: Option<BufferView<'a>>,
+        buffer: &'a Buffer,
+        counter: &'a AtomicI32,
+        a: PhantomData<T>,
+    }
 }
 
 impl<'a, T: BufferData> Drop for BufView<'a, T> {
     fn drop(&mut self) {
-        let view = self.wgpu_view.take();
-        drop(view);
-        let prev = self.counter.fetch_add(-1, std::sync::atomic::Ordering::SeqCst);
-        if prev == 1 {
-            self.buffer.unmap();
+        if let Self::Normal { wgpu_view, buffer, counter, a: _ } = self {
+            let view = wgpu_view.take();
+            drop(view);
+            let prev = counter.fetch_add(-1, std::sync::atomic::Ordering::SeqCst);
+            if prev == 1 {
+                buffer.unmap();
+            }
         }
     }
 }
 
 impl<'a, T: BufferData + bytemuck::Pod> AsRef<[T]> for BufView<'a, T> {
     fn as_ref(&self) -> &[T] {
-        let view = self.wgpu_view.as_ref().unwrap();
-        return bytemuck::cast_slice(view.as_ref());
+        match self {
+            Self::Normal { wgpu_view, buffer: _, counter: _, a: _ } => {
+                let view = wgpu_view.as_ref().unwrap();
+                return bytemuck::cast_slice(view.as_ref());
+            }
+            Self::Empty => {
+                return &[];
+            }
+        }
     }
 }
 
 impl<'a, T: BufferData> AsRef<[u8]> for BufView<'a, T> {
     fn as_ref(&self) -> &[u8] {
-        let view = self.wgpu_view.as_ref().unwrap();
-        return view.as_ref();
+        match self {
+            Self::Normal { wgpu_view, buffer: _, counter: _, a: _ } => {
+                let view = wgpu_view.as_ref().unwrap();
+                return view.as_ref();
+            }
+            Self::Empty => {
+                return &[];
+            }
+        }
     }
 }
 
 impl<'a, T: BufferData + bytemuck::Pod> BufView<'a, T> {
     pub fn cast_t(&self) -> &[T] {
-        let view = self.wgpu_view.as_ref().unwrap();
-        return bytemuck::cast_slice(view.as_ref());
+        self.as_ref()
     }
 }

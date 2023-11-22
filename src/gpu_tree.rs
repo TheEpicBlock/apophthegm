@@ -22,16 +22,16 @@ impl<'dev> GpuTree<'dev> {
     }
 
     pub fn init_layer_from_state(&mut self, state: GameState) {
-        self.init_layer(&[board::convert(&state.get_board())], state.to_move.opposite());
+        self.init_layer(&[board::convert(&state.get_board())], state.to_move);
     }
 
-    pub fn init_layer(&mut self, boards: &[GpuBoard], last_move: Side) {
+    pub fn init_layer(&mut self, boards: &[GpuBoard], to_move: Side) {
         let alloc = self.gpu_allocator.boards.allocate(boards.len() as u64);
         let data = bytemuck::cast_slice(boards);
         self.engine.queue.write_buffer(alloc.buffer(&self.gpu_allocator.boards), alloc.start(), data);
         self.layers.push(GpuTreeLayer {
             num_boards: boards.len() as u32,
-            last_move,
+            to_move,
             board_buf: alloc
         });
     }
@@ -40,7 +40,7 @@ impl<'dev> GpuTree<'dev> {
         let last = self.layers.last().unwrap();
         let mut new_layer = GpuTreeLayer {
             num_boards: 0,
-            last_move: last.last_move.opposite(),
+            to_move: last.to_move.opposite(),
             board_buf: self.gpu_allocator.boards.allocate((last.num_boards * MAX_MOVES) as u64),
         };
         self.expand(last, &mut new_layer).await;
@@ -50,7 +50,7 @@ impl<'dev> GpuTree<'dev> {
     async fn expand(&self, from: &GpuTreeLayer, to: &mut GpuTreeLayer) {
         // Assert that the "to" allocation can always store the moves from the expansion
         assert!(to.board_buf.len() as u32 >= from.num_boards * MAX_MOVES);
-        self.engine.set_all_global_data(from.num_boards, to.last_move, 0);
+        self.engine.set_all_global_data(from.num_boards, from.to_move, 0);
         let mut command_encoder = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
         let bind = ExpansionBindGroupMngr::create(self.engine, &self.gpu_allocator, ExpansionBuffers {
             input: &from.board_buf,
@@ -80,7 +80,7 @@ impl<'dev> GpuTree<'dev> {
 
         self.engine.out_index_staging.slice(..).map_buffer(&self.engine.device, wgpu::MapMode::Read).await.unwrap();
         let out_index_view = self.engine.out_index_staging.slice(..).get_mapped_range();
-        let output_size: u32 = *bytemuck::from_bytes(&out_index_view.as_slice());
+        let output_size: u32 = u32::from_le(*bytemuck::from_bytes(&out_index_view.as_slice()));
         to.num_boards = output_size;
         drop(out_index_view);
         self.engine.out_index_staging.unmap();
@@ -92,7 +92,7 @@ impl<'dev> GpuTree<'dev> {
 
     async fn view_boards(&self, layer: usize) -> BufView<'_, GpuBoard> {
         let layer = &self.layers[layer];
-        let view = self.gpu_allocator.boards.view(&self.engine.queue, &layer.board_buf).await.unwrap();
+        let view = self.gpu_allocator.boards.view(&self.engine.queue, &layer.board_buf, 0..(layer.num_boards as u64)).await.unwrap();
 
         return view;
     }
@@ -100,6 +100,6 @@ impl<'dev> GpuTree<'dev> {
 
 struct GpuTreeLayer {
     num_boards: u32,
-    last_move: Side,
+    to_move: Side,
     board_buf: AllocToken<GpuBoard>,
 }

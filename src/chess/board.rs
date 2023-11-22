@@ -145,7 +145,7 @@ pub struct GpuBoard([u32; 9]);
 
 impl PartialEq<Self> for GpuBoard {
     fn eq(&self, other: &Self) -> bool {
-        self.0[0..(8*4)] == other.0[0..(8*4)]
+        self.0[0..8] == other.0[0..8]
     }
 }
 
