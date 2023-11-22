@@ -86,7 +86,7 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuGlobalData {
     let global_data = device.create_buffer(
         &BufferDescriptor { 
             label: Some("Global Data Uniform"),
-            size: 3 * size_of::<u32>() as u64, 
+            size: 7 * size_of::<u32>() as u64, 
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST, 
             mapped_at_creation: false
         }

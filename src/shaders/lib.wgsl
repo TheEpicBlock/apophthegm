@@ -13,6 +13,10 @@ struct GlobalData {
   input_size: u32,
   to_move: u32,
   move_index: u32,
+  buf_offset_0: u32,
+  buf_offset_1: u32,
+  buf_offset_2: u32,
+  buf_offset_3: u32,
 }
 
 fn getPiece(board: ptr<function, Board>, x: u32, y: u32) -> u32 {

@@ -22,3 +22,18 @@ impl SliceExtension for BufferSlice<'_> {
 pub fn ceil_div(a: u32, b: u64) -> u32 {
     return (a as f64 / b as f64).ceil() as u32;
 }
+
+pub const fn lcm(a: u32, b: u32) -> u32 {
+    (a*b) / gcd(a, b)
+}
+
+pub const fn gcd(a: u32, b: u32) -> u32 {
+    let mut a = a;
+    let mut b = b;
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    };
+    return a;
+}

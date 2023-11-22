@@ -1,15 +1,16 @@
 use std::{marker::PhantomData, rc::Rc, sync::atomic::AtomicI32, ops::{RangeBounds, Range}};
 
 use log::info;
-use wgpu::{Buffer, Device, BufferUsages, BufferDescriptor, BufferAddress, MapMode, BufferAsyncError, BufferView, CommandEncoderDescriptor, Queue};
+use wgpu::{Buffer, Device, BufferUsages, BufferDescriptor, BufferAddress, MapMode, BufferAsyncError, BufferView, CommandEncoderDescriptor, Queue, MAP_ALIGNMENT};
 
-use crate::{shaders::WORKGROUP_SIZE, misc::SliceExtension};
+use crate::{shaders::WORKGROUP_SIZE, misc::{SliceExtension, self}};
 
 pub struct BufferManager<ElementType: BufferData> {
     label: &'static str,
     buffers: Vec<BufData>,
     staging: Buffer,
-    max_elements_per_buf: u64,
+    max_elements_per_buf: u32,
+    max_bricks_per_buf: u32,
     max_bytes_per_buf: u64,
     device: Rc<Device>,
     a: PhantomData<ElementType>,
@@ -17,22 +18,31 @@ pub struct BufferManager<ElementType: BufferData> {
 
 struct BufData {
     buffer: Buffer,
-    allocated_bytes: BufferAddress,
+    allocated_bricks: u32,
     allocations: u64,
     times_mapped: AtomicI32,
 }
 
 pub struct AllocToken<T: BufferData> {
     buffer_index: usize,
+    /// Measured in bytes
     offset: BufferAddress,
-    len: u64,
-    bytes_len: u64,
+    // Measured in bricks
+    len: u32,
+    // Measured in elements
+    len_elems: u32,
+    // Measured in bytes
+    len_bytes: BufferAddress,
     a: PhantomData<T>
 }
 
 impl<T: BufferData> BufferManager<T> {
+    const BRICK_SIZE: u32 = misc::lcm(T::SIZE as u32, MAP_ALIGNMENT as u32);
+    const ELEMS_PER_BRICK: u32 = Self::BRICK_SIZE / T::SIZE as u32;
+
     pub fn create(device: Rc<Device>, max_elems_per_buf: u64, label: &'static str) -> Self {
-        let buffer_size = max_elems_per_buf * T::SIZE as u64;
+        let max_bricks_per_buf = (max_elems_per_buf as u32 * T::SIZE as u32) / Self::BRICK_SIZE;
+        let buffer_size = max_bricks_per_buf as u64 * Self::BRICK_SIZE as u64;
         Self {
             label,
             buffers: Vec::new(),
@@ -42,8 +52,9 @@ impl<T: BufferData> BufferManager<T> {
                 usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }),
-            max_elements_per_buf: max_elems_per_buf,
+            max_elements_per_buf: max_elems_per_buf as u32,
             max_bytes_per_buf: buffer_size,
+            max_bricks_per_buf,
             device,
             a: PhantomData::default(),
         }
@@ -58,7 +69,7 @@ impl<T: BufferData> BufferManager<T> {
                 usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             }),
-            allocated_bytes: 0,
+            allocated_bricks: 0,
             allocations: 0,
             times_mapped: AtomicI32::new(0),
         });
@@ -67,13 +78,12 @@ impl<T: BufferData> BufferManager<T> {
 
     /// Allocates a buffer,
     /// the size is measured in number of elements
-    pub fn allocate(&mut self, size: u64) -> AllocToken<T> {
-        let bytes_size = size * T::SIZE as u64;
+    pub fn allocate(&mut self, size: u32) -> AllocToken<T> {
+        let bricks_needed = misc::ceil_div(size, Self::ELEMS_PER_BRICK as u64);
 
         let buf_index = self.buffers.iter().enumerate().find(|(_, bufdata)| {
-            let bytes_left = self.max_bytes_per_buf - bufdata.allocated_bytes;
-            bytes_left >= bytes_size;
-            false
+            let bricks_left = self.max_bricks_per_buf - bufdata.allocated_bricks;
+            bricks_left >= bricks_needed
         }).map(|(i, _)| i).unwrap_or_else(|| {
             let new_index = self.new_buffer();
             new_index
@@ -82,18 +92,15 @@ impl<T: BufferData> BufferManager<T> {
         let buf = &mut self.buffers[buf_index];
 
         buf.allocations += 1;
-        let offset = buf.allocated_bytes;
-        let mut end = buf.allocated_bytes + size;
-        // Align end
-        let alignment = self.device.limits().min_storage_buffer_offset_alignment as u64;
-        end = end / alignment + if end % alignment == 0 { 0 } else { alignment }; 
-        buf.allocated_bytes = end;
+        let offset = buf.allocated_bricks as u64 * Self::BRICK_SIZE as u64;
+        buf.allocated_bricks += bricks_needed;
 
         AllocToken {
             buffer_index: buf_index,
             offset,
-            len: size,
-            bytes_len: bytes_size,
+            len: bricks_needed,
+            len_elems: bricks_needed * Self::ELEMS_PER_BRICK,
+            len_bytes: bricks_needed as u64 * Self::BRICK_SIZE as u64,
             a: PhantomData::default(),
         }
     }
@@ -102,11 +109,11 @@ impl<T: BufferData> BufferManager<T> {
         let buf = &mut self.buffers[token.buffer_index];
         buf.allocations -= 1;
         if buf.allocations == 0 {
-            buf.allocated_bytes = 0;
+            buf.allocated_bricks = 0;
         }
     }
 
-    pub async fn view(&self, queue: &Queue, token: &AllocToken<T>, bounds: Range<BufferAddress>) -> Result<BufView<'_, T>, BufferAsyncError> {
+    pub async fn view(&self, queue: &Queue, token: &AllocToken<T>, bounds: Range<u32>) -> Result<BufView<'_, T>, BufferAsyncError> {
         assert!((0..token.len()).contains(&bounds.start));
         assert!((0..token.len()).contains(&bounds.end));
         let bound_len = bounds.end-bounds.start;
@@ -126,7 +133,7 @@ impl<T: BufferData> BufferManager<T> {
         queue.submit([command_encoder.finish()]);
 
         let buf = &self.buffers[token.buffer_index];
-        let buf_slice = self.staging.slice((token.start()+bounds.start)..(token.start()+bound_len*T::SIZE as u64));
+        let buf_slice = self.staging.slice((token.start()+(bounds.start as u64*T::SIZE as u64))..(token.start()+bound_len as u64*T::SIZE as u64));
         buf.times_mapped.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         buf_slice.map_buffer(&self.device, MapMode::Read).await?;
         let view = buf_slice.get_mapped_range();
@@ -154,14 +161,19 @@ impl<T> AllocToken<T> where T: BufferData {
         self.offset + self.byte_len()
     }
 
+    /// The first element in the buffer of this allocation slice
+    pub fn start_elem(&self) -> u32 {
+        (self.offset / T::SIZE as u64) as u32
+    }
+
     /// The amount of elements that this allocation slice can store
-    pub fn len(&self) -> u64 {
-        self.len
+    pub fn len(&self) -> u32 {
+        self.len_elems
     }
 
     /// The length in bytes
     pub fn byte_len(&self) -> u64 {
-        self.bytes_len
+        self.len_bytes
     }
 }
 

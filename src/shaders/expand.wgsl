@@ -19,7 +19,7 @@ fn expansion_pass(
   if (global_id.x >= globals.input_size) {
     return;
   }
-  var board = input[global_id.x];
+  var board = input[global_id.x + globals.buf_offset_0];
   let to_move = globals.to_move;
 
   var pawn_start_rank = 6u; // 0-indexed!
@@ -50,7 +50,7 @@ fn expansion_pass(
             if (y == pawn_start_rank && getPiece(&board, x, y+(offset*2u)) == 0u) {
               var new_board2 = movePiece(&board, piece, x, y, x, y+(offset*2u), global_id.x);
               let out = atomicAdd(&out_index, 1u);
-              output[out] = new_board2;
+              output[out + globals.buf_offset_1] = new_board2;
             }
           }
           // Capture
@@ -115,7 +115,7 @@ fn move_in_dir(board: ptr<function, Board>, piece: u32, x: u32, y: u32, dx: i32,
     new_board.pieces[yNew] |= (piece << (xNew*4u));
     setPrev(&new_board, prev);
     let out = atomicAdd(&out_index, 1u);
-    output[out] = new_board;
+    output[out + globals.buf_offset_1] = new_board;
 
     if (target_square != 0u && (target_square & 0x8u) != to_move) {
       // This was a capture, no more moves
@@ -136,7 +136,7 @@ fn try_move(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32, 
   if (!isColour(board, to_move, xNew, yNew)) {
     var new_board = movePiece(board, piece, x, y, xNew, yNew, prev);
     let out = atomicAdd(&out_index, 1u);
-    output[out] = new_board;
+    output[out + globals.buf_offset_1] = new_board;
   }
 }
 
@@ -150,20 +150,20 @@ fn pawn_move(board: ptr<function, Board>, x: u32, y: u32, xNew: u32, yNew: u32, 
     let out = atomicAdd(&out_index, 4u);
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Queen | to_move) << (xNew*4u));
-    output[out] = new_board;
+    output[out + globals.buf_offset_1] = new_board;
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Bishop | to_move) << (xNew*4u));
-    output[out+1u] = new_board;
+    output[out+1u + globals.buf_offset_1] = new_board;
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Horsy | to_move) << (xNew*4u));
-    output[out+2u] = new_board;
+    output[out+2u + globals.buf_offset_1] = new_board;
     new_board.pieces[yNew] &= clear_mask;
     new_board.pieces[yNew] |= ((Rook | to_move) << (xNew*4u));
-    output[out+3u] = new_board;
+    output[out+3u + globals.buf_offset_1] = new_board;
   } else {
     var new_board = movePiece(board, (Pawn | to_move), x, y, xNew, yNew, prev);
     let out = atomicAdd(&out_index, 1u);
-    output[out] = new_board;
+    output[out + globals.buf_offset_1] = new_board;
   }
 }
 

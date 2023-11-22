@@ -1,3 +1,4 @@
+use bytemuck::{Pod, Zeroable};
 use wgpu::{Device, PipelineLayoutDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, ComputePipeline, include_wgsl, ShaderModuleDescriptor, BindGroupLayout, BindGroup, BindGroupDescriptor, BindGroupEntry, DynamicOffset};
 
 use crate::{gpu::{GpuGlobalData, GpuAllocations}, buffers::AllocToken, chess::GpuBoard};
@@ -25,7 +26,7 @@ pub fn expand(device: &Device) -> Shader {
                     visibility: ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: true,
+                        has_dynamic_offset: false,
                         min_binding_size: None
                     },
                     count: None,
@@ -35,7 +36,7 @@ pub fn expand(device: &Device) -> Shader {
                     visibility: ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: true,
+                        has_dynamic_offset: false,
                         min_binding_size: None
                     },
                     count: None,
@@ -288,9 +289,23 @@ impl ExpansionBindGroupMngr {
                 ]
             }
         );
-        let offsets = [0,0];
-        return BindOut(expansion_bind, offsets);
+        let o = BuffOffsets {
+            buf_offset_0: buffers.input.start_elem(),
+            buf_offset_1: buffers.output.start_elem(),
+            buf_offset_2: 0,
+            buf_offset_3: 0,
+        };
+        return BindOut(expansion_bind, o);
     }
 }
 
-pub struct BindOut<const SIZE: usize>(pub BindGroup, pub [DynamicOffset; SIZE]);
+#[derive(Clone, Copy, Zeroable, Pod)]
+#[repr(C)]
+pub struct BuffOffsets {
+    buf_offset_0: u32,
+    buf_offset_1: u32,
+    buf_offset_2: u32,
+    buf_offset_3: u32,
+}
+
+pub struct BindOut<const SIZE: usize>(pub BindGroup, pub BuffOffsets);

@@ -26,7 +26,7 @@ impl<'dev> GpuTree<'dev> {
     }
 
     pub fn init_layer(&mut self, boards: &[GpuBoard], to_move: Side) {
-        let alloc = self.gpu_allocator.boards.allocate(boards.len() as u64);
+        let alloc = self.gpu_allocator.boards.allocate(boards.len() as u32);
         let data = bytemuck::cast_slice(boards);
         self.engine.queue.write_buffer(alloc.buffer(&self.gpu_allocator.boards), alloc.start(), data);
         self.layers.push(GpuTreeLayer {
@@ -41,7 +41,7 @@ impl<'dev> GpuTree<'dev> {
         let mut new_layer = GpuTreeLayer {
             num_boards: 0,
             to_move: last.to_move.opposite(),
-            board_buf: self.gpu_allocator.boards.allocate((last.num_boards * MAX_MOVES) as u64),
+            board_buf: self.gpu_allocator.boards.allocate((last.num_boards * MAX_MOVES)),
         };
         self.expand(last, &mut new_layer).await;
         self.layers.push(new_layer);
@@ -59,7 +59,7 @@ impl<'dev> GpuTree<'dev> {
 
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.engine.expand_shader.1);
-        pass_encoder.set_bind_group(0, &bind.0, &bind.1);
+        pass_encoder.set_bind_group(0, &bind.0, &[]);
         pass_encoder.dispatch_workgroups(ceil_div(from.num_boards, WORKGROUP_SIZE), 1, 1);
         drop(pass_encoder);
         command_encoder.copy_buffer_to_buffer(
@@ -92,7 +92,7 @@ impl<'dev> GpuTree<'dev> {
 
     async fn view_boards(&self, layer: usize) -> BufView<'_, GpuBoard> {
         let layer = &self.layers[layer];
-        let view = self.gpu_allocator.boards.view(&self.engine.queue, &layer.board_buf, 0..(layer.num_boards as u64)).await.unwrap();
+        let view = self.gpu_allocator.boards.view(&self.engine.queue, &layer.board_buf, 0..layer.num_boards).await.unwrap();
 
         return view;
     }
