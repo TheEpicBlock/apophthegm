@@ -13,7 +13,7 @@ use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsag
 
 use crate::buffers::BufferManager;
 use crate::chess::{GpuBoard, Side, EvalScore};
-use crate::shaders::{Shader, self};
+use crate::shaders::{Shader, self, BuffOffsets};
 use crate::misc::SliceExtension;
 
 const WORKGROUP_SIZE: u64 = 64;
@@ -32,21 +32,14 @@ pub struct GpuGlobalData {
 }
 
 impl GpuGlobalData {
-    pub fn set_all_global_data(&self, input_size: u32, to_move: Side, move_num: u32) {
+    pub fn set_all_global_data(&self, input_size: u32, to_move: Side, move_num: u32, offsets: BuffOffsets) {
         assert!(move_num == 0);
-        let mut data = [0; 12];
+        let mut data = [0; 28];
         data[0..4].copy_from_slice(&(input_size as u32).to_le_bytes());
         data[4..8].copy_from_slice(bytemuck::bytes_of(&to_move.gpu_representation()));
         data[8..12].copy_from_slice(bytemuck::bytes_of(&move_num));
+        data[12..28].copy_from_slice(bytemuck::bytes_of(&offsets));
         self.queue.write_buffer(&self.global_data, 0, &data);
-    }
-
-    pub fn set_global_data(&self, to_move: Side, move_num: u32) {
-        assert!(move_num == 0);
-        let mut data = [0; 8];
-        data[0..4].copy_from_slice(bytemuck::bytes_of(&to_move.gpu_representation()));
-        data[4..8].copy_from_slice(bytemuck::bytes_of(&move_num));
-        self.queue.write_buffer(&self.global_data, 4, &data);
     }
 }
 
@@ -298,14 +291,4 @@ pub struct BufferCombo {
 
 fn ceil_div(a: u32, b: u64) -> u32 {
     return (a as f64 / b as f64).ceil() as u32;
-}
-
-pub struct BindGroupCache {
-
-}
-
-impl BindGroupCache {
-    pub fn get_expansion(&mut self, engine: &GpuGlobalData) {
-
-    }
 }

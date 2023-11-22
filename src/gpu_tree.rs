@@ -41,7 +41,7 @@ impl<'dev> GpuTree<'dev> {
         let mut new_layer = GpuTreeLayer {
             num_boards: 0,
             to_move: last.to_move.opposite(),
-            board_buf: self.gpu_allocator.boards.allocate((last.num_boards * MAX_MOVES)),
+            board_buf: self.gpu_allocator.boards.allocate(last.num_boards * MAX_MOVES),
         };
         self.expand(last, &mut new_layer).await;
         self.layers.push(new_layer);
@@ -50,13 +50,14 @@ impl<'dev> GpuTree<'dev> {
     async fn expand(&self, from: &GpuTreeLayer, to: &mut GpuTreeLayer) {
         // Assert that the "to" allocation can always store the moves from the expansion
         assert!(to.board_buf.len() as u32 >= from.num_boards * MAX_MOVES);
-        self.engine.set_all_global_data(from.num_boards, from.to_move, 0);
-        let mut command_encoder = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
+
         let bind = ExpansionBindGroupMngr::create(self.engine, &self.gpu_allocator, ExpansionBuffers {
             input: &from.board_buf,
             output: &to.board_buf,
         });
-
+        
+        self.engine.set_all_global_data(from.num_boards, from.to_move, 0, bind.1);
+        let mut command_encoder = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
         pass_encoder.set_pipeline(&self.engine.expand_shader.1);
         pass_encoder.set_bind_group(0, &bind.0, &[]);
