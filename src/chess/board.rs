@@ -1,6 +1,7 @@
 use std::fmt::{Write, Debug};
 use std::ops::{Index, IndexMut};
 use std::{fmt::Display, ascii, mem::size_of, default};
+use bytemuck::{NoUninit, Pod, Zeroable};
 use enum_map::enum_map;
 
 use crate::buffers::BufferData;
@@ -139,8 +140,8 @@ impl IndexMut<Location> for StandardBoard {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy)]
-pub struct GpuBoard([u8; 9*size_of::<u32>()]);
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct GpuBoard([u32; 9]);
 
 impl PartialEq<Self> for GpuBoard {
     fn eq(&self, other: &Self) -> bool {
@@ -154,11 +155,11 @@ impl BufferData for GpuBoard {
 
 impl Board for GpuBoard {
     fn new_empty() -> Self {
-        Self([0; size_of::<Self>()])
+        Self([0; 9])
     }
 
     fn get(&self, index: Location) -> Option<Piece> {
-        let row = u32::from_le_bytes(self.0.as_chunks::<{size_of::<u32>()}>().0[index.get_y() as usize]);
+        let row = u32::from_le(self.0[index.get_y() as usize]);
         let nibble = ((row >> (index.get_x() as usize * size_of::<u32>()) & 0x0F)) as u8;
         if nibble == 0 {
             return None;
@@ -174,30 +175,22 @@ impl Board for GpuBoard {
     }
 
     fn set(&mut self, index: Location, piece: Option<Piece>) {
-        let row_start = index.get_y() as usize * size_of::<u32>();
-        let byte = &mut self.0[row_start + (index.get_x() / 2) as usize];
-        let nibble: u8 = match piece {
+        let mut row = u32::from_le(self.0[index.get_y() as usize]);
+        let nibble: u32 = match piece {
             None => 0x00,
-            Some(x) => x.as_nibble()
+            Some(x) => x.as_nibble() as u32
         };
 
-        *byte &= !(0x0F << (index.get_x() % 2 * 4));
-        *byte |= nibble << (index.get_x() % 2 * 4);
+        row &= !(0x0F << (index.get_x() * 4));
+        row |= nibble << (index.get_x() * 4);
+        self.0[index.get_y() as usize] = row.to_le();
     }
 }
 
 impl GpuBoard {
-    pub fn from_bytes(b: [u8; size_of::<Self>()]) -> Self {
-        GpuBoard(b)
-    }
-
-    pub fn to_bytes(self) -> [u8; size_of::<Self>()] {
-        self.0
-    }
-
     // Used for debugging
     pub fn get_prev(&self) -> usize {
-        return u32::from_le_bytes(self.0.as_chunks::<{size_of::<u32>()}>().0[8 as usize]) as usize;
+        return u32::from_le(self.0[8 as usize]) as usize;
     }
 }
 

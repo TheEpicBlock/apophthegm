@@ -5,6 +5,7 @@ pub mod piece;
 pub mod test;
 
 use std::fmt::Debug;
+use std::mem::size_of;
 use std::ops::{AddAssign, Add};
 use std::{fmt::Display, cmp::Ordering};
 use std::ascii;
@@ -14,6 +15,11 @@ use float_ord::FloatOrd;
 pub use state::GameState;
 pub use piece::{Piece, PieceType, Side};
 pub use board::{Board, GpuBoard, StandardBoard};
+
+use crate::buffers::BufferData;
+
+/// The upperbound on the amount of moves that can be made in an arbitrary position
+pub const MAX_MOVES: u32 = 218;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Location(u8);
@@ -143,4 +149,8 @@ impl EvalScore {
     pub fn centipawn_relative(&self, side: Side) -> i64 {
         return self.to_centipawn() * (if side == Side::White {1} else {-1});
     }
+}
+
+impl BufferData for EvalScore {
+    const SIZE: usize = size_of::<u32>();
 }

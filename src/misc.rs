@@ -19,4 +19,6 @@ impl SliceExtension for BufferSlice<'_> {
     }
 }
 
-
+pub fn ceil_div(a: u32, b: u64) -> u32 {
+    return (a as f64 / b as f64).ceil() as u32;
+}

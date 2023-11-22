@@ -1,4 +1,6 @@
-use wgpu::{Device, PipelineLayoutDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, ComputePipeline, include_wgsl, ShaderModuleDescriptor, BindGroupLayout};
+use wgpu::{Device, PipelineLayoutDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, ComputePipeline, include_wgsl, ShaderModuleDescriptor, BindGroupLayout, BindGroup, BindGroupDescriptor, BindGroupEntry, DynamicOffset};
+
+use crate::{gpu::{GpuGlobalData, GpuAllocations}, buffers::AllocToken, chess::GpuBoard};
 
 pub const WORKGROUP_SIZE: u64 = 64;
 
@@ -23,7 +25,7 @@ pub fn expand(device: &Device) -> Shader {
                     visibility: ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
+                        has_dynamic_offset: true,
                         min_binding_size: None
                     },
                     count: None,
@@ -33,7 +35,7 @@ pub fn expand(device: &Device) -> Shader {
                     visibility: ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
+                        has_dynamic_offset: true,
                         min_binding_size: None
                     },
                     count: None,
@@ -250,3 +252,45 @@ pub fn fill_max(device: &Device) -> Shader {
 
     return Shader(bind_group_layout, pipeline);
 }
+
+pub struct ExpansionBindGroupMngr {
+    
+}
+
+pub struct ExpansionBuffers<'a> {
+    pub input: &'a AllocToken<GpuBoard>,
+    pub output: &'a AllocToken<GpuBoard>,
+}
+
+impl ExpansionBindGroupMngr {
+    pub fn create(engine: &GpuGlobalData, alloc: &GpuAllocations, buffers: ExpansionBuffers) -> BindOut<2> {
+        let expansion_bind = engine.device.create_bind_group(
+            &BindGroupDescriptor {
+                label: None,
+                layout: &engine.expand_shader.0,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(buffers.input.buffer(&alloc.boards).as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer(buffers.output.buffer(&alloc.boards).as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Buffer(engine.out_index.as_entire_buffer_binding())
+                    },
+                ]
+            }
+        );
+        let offsets = [buffers.input.start() as u32, buffers.output.start() as u32];
+        return BindOut(expansion_bind, offsets);
+    }
+}
+
+pub struct BindOut<const SIZE: usize>(pub BindGroup, pub [DynamicOffset; SIZE]);

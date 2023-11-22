@@ -12,16 +12,17 @@ mod chess;
 mod gpu;
 mod gpu_tree;
 mod buffers;
-pub(crate) mod wgpu_util;
+pub(crate) mod misc;
 mod shaders;
 mod uci;
 
 use core::slice::SlicePattern;
-use std::{mem::size_of, thread, time::Duration, rc::Rc, sync::Arc};
+use std::{mem::size_of, thread, time::Duration, rc::Rc, sync::Arc, cell::RefCell};
 
 use chess::{EvalScore, Board};
 use float_ord::FloatOrd;
-use gpu::{init_gpu_evaluator, GpuChessEvaluator};
+use gpu::{init_gpu_evaluator, GpuGlobalData, GpuAllocations};
+use gpu_tree::GpuTree;
 use tokio::runtime::Handle;
 use tokio_util::task::LocalPoolHandle;
 use uci::ThreadedEngine;
@@ -46,56 +47,16 @@ impl ThreadedEngine for MahEngine {
         let pool = LocalPoolHandle::new(1);
         let task = pool.spawn_pinned(|| {async move {
             let adapter = init_adapter().await;
-            let mut engine = init_gpu_evaluator(&adapter).await;
+            let engine = init_gpu_evaluator(&adapter).await;
+            let mut allocations = GpuAllocations::init(engine.device.clone());
+            let mut tree = GpuTree::new(&engine, &mut allocations);
+
+            tree.init_layer_from_state(state);
+
             loop {
                 if coms.is_stopped() {
                     break;
                 }
-
-                let start_side = state.to_move;
-
-                let pass_1 = engine.create_combo(0, 1);
-                let pass_2 = engine.create_combo(1, 2);
-                let pass_3 = engine.create_combo(2, 3);
-                engine.set_input(&pass_1, [convert(&state.get_board())]).await;
-                engine.run_expansion(&pass_1, start_side).await;
-
-                let first_boards = engine.get_output_boards(&pass_1).await.iter().collect::<Vec<_>>();
-                coms.report_depth_and_nodes(1, first_boards.len() as u64);
-                let mut best_score = EvalScore::worst(start_side);
-                for b in first_boards {
-                    if !b.is_valid(start_side) {
-                        continue;
-                    }
-                    engine.set_input(&pass_1, [b]).await;
-                    engine.run_expansion(&pass_1, start_side.opposite()).await;
-                    coms.report_depth_and_nodes(2, engine.get_out_boards_len(&pass_1));
-
-                    engine.run_expansion(&pass_2, start_side).await;
-                    let num_boards = engine.get_out_boards_len(&pass_2);
-                    coms.report_depth_and_nodes(3, num_boards);
-
-                    if num_boards * 218 <= engine.boards_per_buf() {
-                        // third pass!
-                        engine.run_expansion(&pass_3, start_side.opposite()).await;
-                        coms.report_depth_and_nodes(4, engine.get_out_boards_len(&pass_3));
-
-                        engine.run_eval_contract(&pass_3, start_side.opposite(), 0).await;
-                        engine.run_contract(&pass_2, start_side, 0).await;
-                    } else {
-                        engine.run_eval_contract(&pass_2, start_side, 0).await;
-                    }
-    
-                    let bout = engine.get_output_boards(&pass_1).await;
-                    let eout = engine.get_output_evals(&pass_2).await;
-                    let (_best_board, score) = Iterator::zip(bout.iter(), eout.iter()).max_by(|a, b| EvalScore::better(&a.1, &b.1, start_side.opposite())).unwrap();
-                    if EvalScore::better(&score, &best_score, start_side).is_gt() {
-                        let best_move = board::find_move(&state.get_board(), &b).unwrap();
-                        best_score = score;
-                        coms.set_best(best_move, score);
-                    }
-                }
-                coms.stop();
             }
         }});
         tokio::spawn(task);

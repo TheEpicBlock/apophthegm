@@ -14,38 +14,24 @@ use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsag
 use crate::buffers::BufferManager;
 use crate::chess::{GpuBoard, Side, EvalScore};
 use crate::shaders::{Shader, self};
-use crate::wgpu_util::SliceExtension;
+use crate::misc::SliceExtension;
 
 const WORKGROUP_SIZE: u64 = 64;
 
-pub struct GpuChessEvaluator {
-    device: Rc<Device>,
-    buffers: BoardLists,
-    queue: Queue,
-    global_data: Buffer,
-    just_zero: Buffer,
-    out_index: Buffer,
-    out_index_staging: Buffer,
-    expand_shader: Shader,
-    eval_contract_shader: Shader,
-    contract_shader: Shader,
-    fill_max_shader: Shader,
+pub struct GpuGlobalData {
+    pub device: Rc<Device>,
+    pub queue: Queue,
+    pub global_data: Buffer,
+    pub just_zero: Buffer,
+    pub out_index: Buffer,
+    pub out_index_staging: Buffer,
+    pub expand_shader: Shader,
+    pub eval_contract_shader: Shader,
+    pub contract_shader: Shader,
+    pub fill_max_shader: Shader,
 }
 
-impl GpuChessEvaluator {
-    /// Can only be called just after creation
-    pub async fn set_input(&mut self, c: &BufferCombo, boards: impl IntoIterator<Item = GpuBoard>) {
-        // self.in_buf.slice(..).map_buffer(&self.device, wgpu::MapMode::Write).await.unwrap();
-
-        let mut i = 0;
-        boards.into_iter().for_each(|board| {
-            let start_write = i * size_of::<GpuBoard>();
-            self.queue.write_buffer(self.buffers.get_in(c), start_write as u64, &board.to_bytes());
-            i += 1;
-        });
-        self.buffers.buffer_sizes[c.parent as usize] = i as u32;
-    }
-
+impl GpuGlobalData {
     pub fn set_all_global_data(&self, input_size: u32, to_move: Side, move_num: u32) {
         assert!(move_num == 0);
         let mut data = [0; 12];
@@ -61,153 +47,6 @@ impl GpuChessEvaluator {
         data[0..4].copy_from_slice(bytemuck::bytes_of(&to_move.gpu_representation()));
         data[4..8].copy_from_slice(bytemuck::bytes_of(&move_num));
         self.queue.write_buffer(&self.global_data, 4, &data);
-    }
-
-    /// Creates children based on parents
-    pub async fn run_expansion(&mut self, combo: &BufferCombo, to_move: Side) {
-        self.device.start_capture();
-        let parent_size = self.buffers.buffer_sizes[combo.parent as usize];
-        self.set_all_global_data(parent_size, to_move, 0);
-        let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
-        let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
-        pass_encoder.set_pipeline(&self.expand_shader.1);
-        pass_encoder.set_bind_group(0, &combo.expansion_bind, &[]);
-        pass_encoder.dispatch_workgroups(ceil_div(parent_size, WORKGROUP_SIZE), 1, 1);
-        drop(pass_encoder);
-        command_encoder.copy_buffer_to_buffer(
-            &self.out_index,
-            0, // Source offset
-            &self.out_index_staging,
-            0, // Destination offset
-            1 * size_of::<u32>() as u64,
-        );
-        command_encoder.copy_buffer_to_buffer(
-            &self.just_zero,
-            0, // Source offset
-            &self.out_index,
-            0, // Destination offset
-            1 * size_of::<u32>() as u64,
-        );
-        self.queue.submit([command_encoder.finish()]);
-
-        self.out_index_staging.slice(..).map_buffer(&self.device, wgpu::MapMode::Read).await.unwrap();
-        let out_index_view = self.out_index_staging.slice(..).get_mapped_range();
-        let output_size: u32 = *bytemuck::from_bytes(&out_index_view.as_slice());
-        self.buffers.buffer_sizes[combo.child as usize] = output_size;
-        drop(out_index_view);
-        self.out_index_staging.unmap();
-        self.device.stop_capture();
-    }
-
-    /// Takes in the children, runs the eval on each of them, and then outputs an eval for each of the parents
-    pub async fn run_eval_contract(&mut self, combo: &BufferCombo, to_move: Side, move_num: u32) {
-        self.device.start_capture();
-        let parent_size = self.buffers.buffer_sizes[combo.parent as usize]; // For the output evals
-        let child_size = self.buffers.buffer_sizes[combo.child as usize]; // For the input boards
-        assert!(child_size >= parent_size);
-        self.set_all_global_data(child_size, to_move, move_num);
-
-        let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
-        if to_move == Side::Black {
-            let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
-            pass_encoder.set_pipeline(&self.fill_max_shader.1);
-            pass_encoder.set_bind_group(0, &combo.fill_max_bind, &[]);
-            pass_encoder.dispatch_workgroups(ceil_div(parent_size, WORKGROUP_SIZE), 1, 1);
-            drop(pass_encoder);
-        } else {
-            command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.parent as usize], 0, None);
-        }
-        let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
-        pass_encoder.set_pipeline(&self.eval_contract_shader.1);
-        pass_encoder.set_bind_group(0, &combo.eval_contract_bind, &[]);
-        pass_encoder.dispatch_workgroups(ceil_div(child_size, WORKGROUP_SIZE), 1, 1);
-        drop(pass_encoder);
-        self.queue.submit([command_encoder.finish()]);
-        self.device.stop_capture();
-    }
-
-    /// Calculates parent evals based on child evals
-    pub async fn run_contract(&mut self, combo: &BufferCombo, to_move: Side, move_num: u32) {
-        self.device.start_capture();
-        let parent_size = self.buffers.buffer_sizes[combo.parent as usize]; // For the output evals
-        let child_size = self.buffers.buffer_sizes[combo.child as usize]; // For the input boards
-        assert!(child_size >= parent_size);
-        self.set_all_global_data(child_size, to_move, move_num);
-
-        let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
-        if to_move == Side::Black {
-            let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
-            pass_encoder.set_pipeline(&self.fill_max_shader.1);
-            pass_encoder.set_bind_group(0, &combo.fill_max_bind, &[]);
-            pass_encoder.dispatch_workgroups(ceil_div(parent_size, WORKGROUP_SIZE), 1, 1);
-            drop(pass_encoder);
-        } else {
-            command_encoder.clear_buffer(&self.buffers.eval_buffers[combo.parent as usize], 0, None);
-        }
-        let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
-        pass_encoder.set_pipeline(&self.contract_shader.1);
-        pass_encoder.set_bind_group(0, &combo.contract_bind, &[]);
-        pass_encoder.dispatch_workgroups(ceil_div(child_size, WORKGROUP_SIZE), 1, 1);
-        drop(pass_encoder);
-        self.queue.submit([command_encoder.finish()]);
-        self.device.stop_capture();
-    }
-
-    pub fn get_out_boards_len(&self, combo: &BufferCombo) -> u64 {
-        return self.buffers.buffer_sizes[combo.child as usize] as u64;
-    }
-
-    pub async fn get_output_boards<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<{size_of::<GpuBoard>()}, impl (Fn(&[u8; size_of::<GpuBoard>()]) -> GpuBoard)> {
-        let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
-        command_encoder.copy_buffer_to_buffer(
-            &self.buffers.get_out(combo),
-            0, // Source offset
-            &self.buffers.staging,
-            0, // Destination offset
-            self.buffers.buffer_size,
-        );
-        self.queue.submit([command_encoder.finish()]);
-
-        self.buffers.staging().slice(..).map_buffer(&self.device, wgpu::MapMode::Read).await.unwrap();
-        
-        let staging_view = self.buffers.staging().slice(..).get_mapped_range();
-
-        let amount = self.buffers.buffer_sizes[combo.child as usize];
-        return SelfClosingBufferView{ buf_view: Some(staging_view), amount: amount as usize, buf: &self.buffers.staging(), func: |b: &[u8; size_of::<GpuBoard>()]| GpuBoard::from_bytes(*b)};
-    }
-
-    pub async fn get_output_evals<'a>(&'a self, combo: &BufferCombo) -> SelfClosingBufferView<4, impl (Fn(&[u8; 4]) -> EvalScore)> {
-        let mut command_encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
-        command_encoder.copy_buffer_to_buffer(
-            &self.buffers.eval_buffers[combo.parent as usize],
-            0, // Source offset
-            &self.buffers.eval_staging,
-            0, // Destination offset
-            self.buffers.boards_per_buf * size_of::<i32>() as u64,
-        );
-        self.queue.submit([command_encoder.finish()]);
-
-        self.buffers.eval_staging.slice(..).map_buffer(&self.device, wgpu::MapMode::Read).await.unwrap();
-        
-        let staging_view = self.buffers.eval_staging.slice(..).get_mapped_range();
-
-        let amount = self.buffers.buffer_sizes[combo.parent as usize];
-        return SelfClosingBufferView{
-            buf_view: Some(staging_view),
-            amount: amount as usize,
-            buf: &self.buffers.eval_staging,
-            func: |b: &[u8; size_of::<u32>()]| {
-                let num = bytemuck::cast(u32::from_le_bytes(*b) ^ (1<<31));
-                return EvalScore::from(num);
-            }};
-    }
-
-    pub fn create_combo(&self, input: u8, output: u8) -> BufferCombo {
-        return self.buffers.create_combo(input, output, self);
-    }
-
-    pub fn boards_per_buf(&self) -> u64 {
-        return self.buffers.boards_per_buf;
     }
 }
 
@@ -239,7 +78,7 @@ impl <const N: usize, F> Drop for SelfClosingBufferView<'_, N, F> {
     }
 }
 
-pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
+pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuGlobalData {
     info!("Using gpu adapter: {:?}", adapter.get_info());
 
     let (device, queue) = adapter.request_device(&DeviceDescriptor::default(), None).await.expect("Failed to open GPU");
@@ -287,11 +126,8 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuChessEvaluator {
 
     let device_rc = Rc::new(device);
 
-    let buffers = BoardLists::init(device_rc.clone());
-
-    return GpuChessEvaluator {
+    return GpuGlobalData {
         device: device_rc,
-        buffers,
         queue,
         global_data,
         just_zero,
@@ -319,21 +155,16 @@ pub async fn init_adapter() -> Adapter {
     return adapter;
 }
 
-pub struct BoardLists {
-    boards: BufferManager<GpuBoard>,
-    board_buffers: [Buffer; 4],
-    buffer_sizes: [u32; 4],
-    eval_buffers: [Buffer; 4],
-    eval_staging: Buffer,
-    staging: Buffer,
+pub struct GpuAllocations {
+    pub boards: BufferManager<GpuBoard>,
+    pub evals: BufferManager<EvalScore>,
     /// The amount of boards per buffer (for buffers that contain boards)
     boards_per_buf: u64,
     /// The size of buffers (for buffers that contain boards) (in bytes)
     buffer_size: u64,
-    combo_cache: HashMap<(u8, u8), BufferCombo>,
 }
 
-impl<'dev> BoardLists {
+impl<'dev> GpuAllocations {
     pub fn init(device: Rc<Device>) -> Self {
         // Buffer size calculations
         let max_buffer_size = u64::min(device.limits().max_buffer_size, device.limits().max_storage_buffer_binding_size as u64);
@@ -345,166 +176,115 @@ impl<'dev> BoardLists {
         let mut boards_per_buf = u64::min(max_boards_per_buf, max_boards_dispatch);
         if cfg!(test) {
             info!("Detected test-mode, downsizing buffers");
-            boards_per_buf = 128;
+            boards_per_buf = 512;
         }
         let buffer_size = boards_per_buf * size_of::<GpuBoard>() as u64;
         info!("We're allocating buffers of size {buffer_size}, which fits {boards_per_buf} boards");
 
-        let board_buffers = std::array::from_fn(|i| {
-            device.create_buffer(
-                &BufferDescriptor { 
-                    label: Some(&format!("Board Storage Buf #{i}")),
-                    size: buffer_size, 
-                    usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC, 
-                    mapped_at_creation: false
-                }
-            )
-        });
+        let boards = BufferManager::create(device.clone(), boards_per_buf, "Board storage");
+        let evals = BufferManager::create(device.clone(), boards_per_buf, "Eval storage");
 
-        let eval_buffers = std::array::from_fn(|i| {
-            device.create_buffer(
-                &BufferDescriptor { 
-                    label: Some(&format!("Eval Storage Buf #{i}")),
-                    size: boards_per_buf * size_of::<i32>() as u64, 
-                    usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC, 
-                    mapped_at_creation: false
-                }
-            )
-        });
-
-        let staging = device.create_buffer(
-            &BufferDescriptor { 
-                label: Some(&format!("Board Storage Staging")),
-                size: buffer_size, 
-                usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST, 
-                mapped_at_creation: false
-            }
-        );
-
-        let eval_staging = device.create_buffer(
-            &BufferDescriptor { 
-                label: Some(&format!("Eval Staging")),
-                size: boards_per_buf * size_of::<i32>() as u64, 
-                usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST, 
-                mapped_at_creation: false
-            }
-        );
-
-        let boards = BufferManager::create(device, boards_per_buf, "Board storage");
-
-        return Self {boards, board_buffers, boards_per_buf, eval_buffers, buffer_size, staging, eval_staging, combo_cache: HashMap::default(), buffer_sizes: [0; 4]};
+        return Self {boards, evals, boards_per_buf,buffer_size};
     }
 
-    pub fn create_combo(&self, parent: u8, child: u8, engine: &GpuChessEvaluator) -> BufferCombo {
-        let expansion_bind = engine.device.create_bind_group(
-            &BindGroupDescriptor {
-                label: None,
-                layout: &engine.expand_shader.0,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(self.board_buffers[parent as usize].as_entire_buffer_binding())
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
-                    },
-                    BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
-                    },
-                    BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::Buffer(engine.out_index.as_entire_buffer_binding())
-                    },
-                ]
-            }
-        );
+    // pub fn create_combo(&self, parent: u8, child: u8, engine: &GpuChessEvaluator) -> BufferCombo {
+    //     let expansion_bind = engine.device.create_bind_group(
+    //         &BindGroupDescriptor {
+    //             label: None,
+    //             layout: &engine.expand_shader.0,
+    //             entries: &[
+    //                 BindGroupEntry {
+    //                     binding: 0,
+    //                     resource: wgpu::BindingResource::Buffer(self.board_buffers[parent as usize].as_entire_buffer_binding())
+    //                 },
+    //                 BindGroupEntry {
+    //                     binding: 1,
+    //                     resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
+    //                 },
+    //                 BindGroupEntry {
+    //                     binding: 2,
+    //                     resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+    //                 },
+    //                 BindGroupEntry {
+    //                     binding: 3,
+    //                     resource: wgpu::BindingResource::Buffer(engine.out_index.as_entire_buffer_binding())
+    //                 },
+    //             ]
+    //         }
+    //     );
 
-        let eval_contract_bind = engine.device.create_bind_group(
-            &BindGroupDescriptor {
-                label: None,
-                layout: &engine.eval_contract_shader.0,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
-                    },
-                    BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
-                    },
-                ]
-            }
-        );
+    //     let eval_contract_bind = engine.device.create_bind_group(
+    //         &BindGroupDescriptor {
+    //             label: None,
+    //             layout: &engine.eval_contract_shader.0,
+    //             entries: &[
+    //                 BindGroupEntry {
+    //                     binding: 0,
+    //                     resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+    //                 },
+    //                 BindGroupEntry {
+    //                     binding: 1,
+    //                     resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
+    //                 },
+    //                 BindGroupEntry {
+    //                     binding: 2,
+    //                     resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
+    //                 },
+    //             ]
+    //         }
+    //     );
 
-        let contract_bind = engine.device.create_bind_group(
-            &BindGroupDescriptor {
-                label: None,
-                layout: &engine.contract_shader.0,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
-                    },
-                    BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[child as usize].as_entire_buffer_binding())
-                    },
-                    BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
-                    },
-                ]
-            }
-        );
+    //     let contract_bind = engine.device.create_bind_group(
+    //         &BindGroupDescriptor {
+    //             label: None,
+    //             layout: &engine.contract_shader.0,
+    //             entries: &[
+    //                 BindGroupEntry {
+    //                     binding: 0,
+    //                     resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+    //                 },
+    //                 BindGroupEntry {
+    //                     binding: 1,
+    //                     resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
+    //                 },
+    //                 BindGroupEntry {
+    //                     binding: 2,
+    //                     resource: wgpu::BindingResource::Buffer(self.eval_buffers[child as usize].as_entire_buffer_binding())
+    //                 },
+    //                 BindGroupEntry {
+    //                     binding: 3,
+    //                     resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
+    //                 },
+    //             ]
+    //         }
+    //     );
 
-        let fill_max_bind = engine.device.create_bind_group(
-            &BindGroupDescriptor {
-                label: None,
-                layout: &engine.fill_max_shader.0,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
-                    },
-                ]
-            }
-        );
+    //     let fill_max_bind = engine.device.create_bind_group(
+    //         &BindGroupDescriptor {
+    //             label: None,
+    //             layout: &engine.fill_max_shader.0,
+    //             entries: &[
+    //                 BindGroupEntry {
+    //                     binding: 0,
+    //                     resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+    //                 },
+    //                 BindGroupEntry {
+    //                     binding: 1,
+    //                     resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
+    //                 },
+    //             ]
+    //         }
+    //     );
 
-        return BufferCombo {
-            expansion_bind,
-            eval_contract_bind,
-            contract_bind,
-            fill_max_bind,
-            parent,
-            child,
-        };
-    }
-
-    pub fn get_in(&self, combo: &BufferCombo) -> &Buffer {
-        return &self.board_buffers[combo.parent as usize];
-    }
-
-    pub fn get_out(&self, combo: &BufferCombo) -> &Buffer {
-        return &self.board_buffers[combo.child as usize];
-    }
-
-    pub fn staging(&self) -> &Buffer {
-        &self.staging
-    }
+    //     return BufferCombo {
+    //         expansion_bind,
+    //         eval_contract_bind,
+    //         contract_bind,
+    //         fill_max_bind,
+    //         parent,
+    //         child,
+    //     };
+    // }
 }
 
 pub struct BufferCombo {
@@ -518,4 +298,14 @@ pub struct BufferCombo {
 
 fn ceil_div(a: u32, b: u64) -> u32 {
     return (a as f64 / b as f64).ceil() as u32;
+}
+
+pub struct BindGroupCache {
+
+}
+
+impl BindGroupCache {
+    pub fn get_expansion(&mut self, engine: &GpuGlobalData) {
+
+    }
 }
