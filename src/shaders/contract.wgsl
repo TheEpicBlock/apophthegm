@@ -3,7 +3,7 @@ var<uniform> globals: GlobalData;
 @group(0) @binding(1)
 var<storage, read> child_boards: array<Board>;
 @group(0) @binding(2)
-var<storage, read> child_evals: array<u32>;
+var<storage, read_write> child_evals: array<u32>;
 @group(0) @binding(3)
 var<storage, read_write> parent_evals: array<atomic<u32>>;
 
@@ -19,15 +19,15 @@ fn eval_contract_pass(
   if (global_id.x >= globals.input_size) {
     return;
   }
-  var board = child_boards[global_id.x];
+  var board = child_boards[global_id.x + globals.buf_offset_1];
   let prev_index = getPrev(&board, globals.move_index);
 
   switch globals.to_move {
     case 0x8u: {
-      atomicMax(&parent_evals[prev_index], child_evals[global_id.x]);
+      atomicMax(&parent_evals[prev_index + globals.buf_offset_3], child_evals[global_id.x + globals.buf_offset_2]);
     }
     case 0x0u: {
-      atomicMin(&parent_evals[prev_index], child_evals[global_id.x]);
+      atomicMin(&parent_evals[prev_index + globals.buf_offset_3], child_evals[global_id.x + globals.buf_offset_2]);
     }
     default: {}
   }

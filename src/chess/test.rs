@@ -290,7 +290,7 @@ async fn multiple_expansions() {
 async fn test_eval() {
     // It should be obviously better to move the pawn two spots than just one
     let board = GameState::from_fen("8/p7/8/8/8/8/4P2/8 w KQkq - 0 1");
-    let mut engine = init_gpu_evaluator(&GPU_ADAPTER).await;
+    let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
     let mut allocator = GpuAllocations::init(engine.device.clone());
     let mut tree = GpuTree::new(&engine, &mut allocator);
     tree.init_layer_from_state(board);
@@ -305,8 +305,8 @@ async fn test_eval() {
     assert!(best.to_centipawn() > worst.to_centipawn());
     
     // Test contract
-    // engine.run_contract(&pass_1, Side::White, 0).await;
-    // let evals: Vec<_> = engine.get_output_evals(&pass_1).await.iter().collect();
-    // assert_eq!(evals.len(), 1);
-    // assert_eq!(evals[0], *best);
+    tree.contract(1).await;
+    let evals: Vec<_> = tree.view_evals(0).await.cast_t().into_iter().map(|x| x.clone()).collect();
+    assert_eq!(evals.len(), 1);
+    assert_eq!(evals[0], *best);
 }

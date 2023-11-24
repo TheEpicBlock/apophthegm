@@ -169,7 +169,7 @@ pub fn contract(device: &Device) -> Shader {
                     binding: 2,
                     visibility: ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
                         has_dynamic_offset: false,
                         min_binding_size: None
                     },
@@ -347,6 +347,7 @@ pub struct ContractBindGroupMngr {
 pub struct ContractBuffers<'a> {
     pub parent_evals_boards: &'a AllocToken<EvalScore>,
     pub child_boards: &'a AllocToken<GpuBoard>,
+    pub child_evals: &'a AllocToken<EvalScore>,
 }
 
 impl ContractBindGroupMngr {
@@ -366,6 +367,10 @@ impl ContractBindGroupMngr {
                     },
                     BindGroupEntry {
                         binding: 2,
+                        resource: wgpu::BindingResource::Buffer(buffers.child_evals.buffer(&alloc.evals).as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 3,
                         resource: wgpu::BindingResource::Buffer(buffers.parent_evals_boards.buffer(&alloc.evals).as_entire_buffer_binding())
                     },
                 ]
@@ -374,8 +379,8 @@ impl ContractBindGroupMngr {
         let o = BuffOffsets {
             buf_offset_0: 0,
             buf_offset_1: buffers.child_boards.start_elem(),
-            buf_offset_2: buffers.parent_evals_boards.start_elem(),
-            buf_offset_3: 0,
+            buf_offset_2: buffers.child_evals.start_elem(),
+            buf_offset_3: buffers.parent_evals_boards.start_elem(),
         };
         return BindOut(expansion_bind, o);
     }

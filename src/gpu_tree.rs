@@ -3,7 +3,7 @@ use std::{mem::size_of, num::NonZeroU64};
 
 use wgpu::{CommandEncoderDescriptor, ComputePassDescriptor};
 
-use crate::{gpu::{GpuGlobalData, GpuAllocations}, chess::{board::{GpuBoard, self}, MAX_MOVES, Side, GameState, EvalScore}, buffers::{AllocToken, BufView}, misc::{ceil_div, SliceExtension}, shaders::{WORKGROUP_SIZE, ExpansionBindGroupMngr, ExpansionBuffers, FillMaxBindGroupMngr, FillMaxBuffers, EvalContractBindGroupMngr, EvalContractBuffers}};
+use crate::{gpu::{GpuGlobalData, GpuAllocations}, chess::{board::{GpuBoard, self}, MAX_MOVES, Side, GameState, EvalScore}, buffers::{AllocToken, BufView}, misc::{ceil_div, SliceExtension}, shaders::{WORKGROUP_SIZE, ExpansionBindGroupMngr, ExpansionBuffers, FillMaxBindGroupMngr, FillMaxBuffers, EvalContractBindGroupMngr, EvalContractBuffers, ContractBindGroupMngr, ContractBuffers}};
 
 /// A tree of chess positions that lives mainly on the gpu
 pub struct GpuTree<'dev> {
@@ -89,17 +89,35 @@ impl<'dev> GpuTree<'dev> {
         self.engine.out_index_staging.unmap();
     }
 
+
     pub async fn contract_eval(&mut self, layer: usize) {
+        self.contract_generic(layer, true).await
+    }
+
+    pub async fn contract(&mut self, layer: usize) {
+        self.contract_generic(layer, false).await
+    }
+
+    async fn contract_generic(&mut self, layer: usize, do_eval: bool) {
         let [parent_layer, child_layer] = self.layers.get_many_mut([layer - 1, layer]).unwrap();
 
         let parent_eval = parent_layer.get_or_create_eval_buf(&mut self.gpu_allocator);
         let fill_max_bind = FillMaxBindGroupMngr::create(self.engine, &self.gpu_allocator, FillMaxBuffers {
             boards: parent_eval,
         });
-        let eval_contract_bind = EvalContractBindGroupMngr::create(self.engine, &self.gpu_allocator, EvalContractBuffers {
-            parent_evals_boards: parent_eval,
-            child_boards: &child_layer.board_buf,
-        });
+        
+        let generic_contract_bind = if do_eval {
+            EvalContractBindGroupMngr::create(self.engine, &self.gpu_allocator, EvalContractBuffers {
+                parent_evals_boards: parent_eval,
+                child_boards: &child_layer.board_buf,
+            })
+        } else {
+            ContractBindGroupMngr::create(self.engine, &self.gpu_allocator, ContractBuffers {
+                parent_evals_boards: parent_eval,
+                child_boards: &child_layer.board_buf,
+                child_evals: child_layer.eval_buf.as_ref().expect("Can't contract if the children don't have evals")
+            })
+        };
 
         let mut command_encoder = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
         if parent_layer.to_move == Side::Black {
@@ -121,9 +139,13 @@ impl<'dev> GpuTree<'dev> {
             }
         }
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
-        self.engine.set_all_global_data(child_layer.num_boards, parent_layer.to_move, 0, eval_contract_bind.1);
-        pass_encoder.set_pipeline(&self.engine.eval_contract_shader.1);
-        pass_encoder.set_bind_group(0, &eval_contract_bind.0, &[]);
+        self.engine.set_all_global_data(child_layer.num_boards, parent_layer.to_move, 0, generic_contract_bind.1);
+        if do_eval {
+            pass_encoder.set_pipeline(&self.engine.eval_contract_shader.1);
+        } else {
+            pass_encoder.set_pipeline(&self.engine.contract_shader.1);
+        }
+        pass_encoder.set_bind_group(0, &generic_contract_bind.0, &[]);
         pass_encoder.dispatch_workgroups(ceil_div(child_layer.num_boards, WORKGROUP_SIZE), 1, 1);
         drop(pass_encoder);
         self.engine.queue.submit([command_encoder.finish()]);
