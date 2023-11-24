@@ -21,7 +21,7 @@ impl<'dev> GpuTree<'dev> {
         }
     }
 
-    pub fn init_layer_from_state(&mut self, state: GameState) {
+    pub fn init_layer_from_state(&mut self, state: &GameState) {
         self.init_layer(&[board::convert(&state.get_board())], state.to_move);
     }
 

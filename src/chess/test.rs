@@ -27,7 +27,7 @@ impl TestEngine for GpuTester {
         let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
         let mut allocator = GpuAllocations::init(engine.device.clone());
         let mut tree = GpuTree::new(&engine, &mut allocator);
-        tree.init_layer_from_state(board_in);
+        tree.init_layer_from_state(&board_in);
         tree.expand_last_layer().await;
         return tree.view_boards_last().await.cast_t().into_iter().map(|b| b.clone()).collect();
     }
@@ -277,7 +277,7 @@ async fn multiple_expansions() {
     let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
     let mut allocator = GpuAllocations::init(engine.device.clone());
     let mut tree = GpuTree::new(&engine, &mut allocator);
-    tree.init_layer_from_state(board);
+    tree.init_layer_from_state(&board);
     tree.expand_last_layer().await;
     tree.expand_last_layer().await;
 
@@ -293,7 +293,7 @@ async fn test_eval() {
     let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
     let mut allocator = GpuAllocations::init(engine.device.clone());
     let mut tree = GpuTree::new(&engine, &mut allocator);
-    tree.init_layer_from_state(board);
+    tree.init_layer_from_state(&board);
     tree.expand_last_layer().await;
     tree.expand_last_layer().await;
     tree.contract_eval(2).await;

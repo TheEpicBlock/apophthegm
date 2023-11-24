@@ -50,15 +50,35 @@ impl ThreadedEngine for MahEngine {
             let adapter = init_adapter().await;
             let engine = init_gpu_evaluator(&adapter).await;
             let mut allocations = GpuAllocations::init(engine.device.clone());
+
             let mut tree = GpuTree::new(&engine, &mut allocations);
+            tree.init_layer_from_state(&state);
+            tree.expand_last_layer().await;
+            let first_moves = tree.view_boards_last().await.cast_t().to_vec();
+            drop(tree);
 
-            tree.init_layer_from_state(state);
-
-            loop {
+            let mut best_score = EvalScore::worst(state.to_move);
+            for m in first_moves {
                 if coms.is_stopped() {
                     break;
                 }
+                if !m.is_valid(state.to_move) {
+                    continue;
+                }
+
+                let mut tree = GpuTree::new(&engine, &mut allocations);
+                tree.init_layer(&[m], state.to_move.opposite());
+                tree.expand_last_layer().await;
+                tree.expand_last_layer().await;
+                tree.contract_eval(2).await;
+                tree.contract(1).await;
+                let result = tree.view_evals(0).await.cast_t()[0];
+                if EvalScore::better(&result, &best_score, state.to_move).is_ge() {
+                    coms.set_best(board::find_move(&state.get_board(), &m).unwrap(), result);
+                    best_score = result;
+                }
             }
+            coms.stop();
         }});
         tokio::spawn(task);
     }
