@@ -184,3 +184,14 @@ impl GpuTreeLayer {
         })
     }
 }
+
+impl Drop for GpuTree<'_> {
+    fn drop(&mut self) {
+        self.layers.drain(..).for_each(|layer| {
+            self.gpu_allocator.boards.dealloc(layer.board_buf);
+            if let Some(eval_buf) = layer.eval_buf {
+                self.gpu_allocator.evals.dealloc(eval_buf);
+            }
+        });
+    }
+}
