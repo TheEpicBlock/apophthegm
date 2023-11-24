@@ -1,9 +1,9 @@
 use core::slice::SlicePattern;
-use std::mem::size_of;
+use std::{mem::size_of, num::NonZeroU64};
 
 use wgpu::{CommandEncoderDescriptor, ComputePassDescriptor};
 
-use crate::{gpu::{GpuGlobalData, GpuAllocations}, chess::{board::{GpuBoard, self}, MAX_MOVES, Side, GameState}, buffers::{AllocToken, BufView}, misc::{ceil_div, SliceExtension}, shaders::{WORKGROUP_SIZE, ExpansionBindGroupMngr, ExpansionBuffers}};
+use crate::{gpu::{GpuGlobalData, GpuAllocations}, chess::{board::{GpuBoard, self}, MAX_MOVES, Side, GameState, EvalScore}, buffers::{AllocToken, BufView}, misc::{ceil_div, SliceExtension}, shaders::{WORKGROUP_SIZE, ExpansionBindGroupMngr, ExpansionBuffers, FillMaxBindGroupMngr, FillMaxBuffers, EvalContractBindGroupMngr, EvalContractBuffers}};
 
 /// A tree of chess positions that lives mainly on the gpu
 pub struct GpuTree<'dev> {
@@ -32,7 +32,8 @@ impl<'dev> GpuTree<'dev> {
         self.layers.push(GpuTreeLayer {
             num_boards: boards.len() as u32,
             to_move,
-            board_buf: alloc
+            board_buf: alloc,
+            eval_buf: None,
         });
     }
 
@@ -42,6 +43,7 @@ impl<'dev> GpuTree<'dev> {
             num_boards: 0,
             to_move: last.to_move.opposite(),
             board_buf: self.gpu_allocator.boards.allocate(last.num_boards * MAX_MOVES),
+            eval_buf: None,
         };
         self.expand(last, &mut new_layer).await;
         self.layers.push(new_layer);
@@ -87,6 +89,46 @@ impl<'dev> GpuTree<'dev> {
         self.engine.out_index_staging.unmap();
     }
 
+    pub async fn contract_eval(&mut self, layer: usize) {
+        let [parent_layer, child_layer] = self.layers.get_many_mut([layer - 1, layer]).unwrap();
+
+        let parent_eval = parent_layer.get_or_create_eval_buf(&mut self.gpu_allocator);
+        let fill_max_bind = FillMaxBindGroupMngr::create(self.engine, &self.gpu_allocator, FillMaxBuffers {
+            boards: parent_eval,
+        });
+        let eval_contract_bind = EvalContractBindGroupMngr::create(self.engine, &self.gpu_allocator, EvalContractBuffers {
+            parent_evals_boards: parent_eval,
+            child_boards: &child_layer.board_buf,
+        });
+
+        let mut command_encoder = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
+        if parent_layer.to_move == Side::Black {
+            // We should be able to optimize this and combine the data for these passes, so we don't need two command encoders
+            let mut command_encoder2 = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
+            let mut pass_encoder = command_encoder2.begin_compute_pass(&ComputePassDescriptor::default());
+            self.engine.set_all_global_data(parent_layer.num_boards, parent_layer.to_move, 0, fill_max_bind.1);
+            pass_encoder.set_pipeline(&self.engine.fill_max_shader.1);
+            pass_encoder.set_bind_group(0, &fill_max_bind.0, &[]);
+            pass_encoder.dispatch_workgroups(ceil_div(parent_layer.num_boards, WORKGROUP_SIZE), 1, 1);
+            drop(pass_encoder);
+            self.engine.queue.submit([command_encoder2.finish()]);
+        } else {
+            match NonZeroU64::try_from(parent_layer.board_buf.byte_len()) {
+                Ok(size) => {
+                    command_encoder.clear_buffer(parent_layer.board_buf.buffer(&self.gpu_allocator.boards), parent_layer.board_buf.start(), Some(size));
+                },
+                Err(_) => {},
+            }
+        }
+        let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
+        self.engine.set_all_global_data(child_layer.num_boards, parent_layer.to_move, 0, eval_contract_bind.1);
+        pass_encoder.set_pipeline(&self.engine.eval_contract_shader.1);
+        pass_encoder.set_bind_group(0, &eval_contract_bind.0, &[]);
+        pass_encoder.dispatch_workgroups(ceil_div(child_layer.num_boards, WORKGROUP_SIZE), 1, 1);
+        drop(pass_encoder);
+        self.engine.queue.submit([command_encoder.finish()]);
+    }
+
     pub async fn view_boards_last(&self) -> BufView<'_, GpuBoard> {
         self.view_boards(self.layers.len()-1).await
     }
@@ -97,10 +139,26 @@ impl<'dev> GpuTree<'dev> {
 
         return view;
     }
+
+    pub async fn view_evals(&self, layer: usize) -> BufView<'_, EvalScore> {
+        let layer = &self.layers[layer];
+        let view = self.gpu_allocator.evals.view(&self.engine.queue, &layer.eval_buf.as_ref().unwrap(), 0..layer.num_boards).await.unwrap();
+
+        return view;
+    }
 }
 
 struct GpuTreeLayer {
     num_boards: u32,
     to_move: Side,
     board_buf: AllocToken<GpuBoard>,
+    eval_buf: Option<AllocToken<EvalScore>>,
+}
+
+impl GpuTreeLayer {
+    pub fn get_or_create_eval_buf(&mut self, alloc: &mut GpuAllocations) -> &AllocToken<EvalScore> {
+        self.eval_buf.get_or_insert_with(|| {
+            alloc.evals.allocate(self.num_boards)
+        })
+    }
 }

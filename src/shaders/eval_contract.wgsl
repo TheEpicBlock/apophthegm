@@ -17,16 +17,16 @@ fn eval_contract_pass(
   if (global_id.x >= globals.input_size) {
     return;
   }
-  var board = child_boards[global_id.x];
+  var board = child_boards[global_id.x + globals.buf_offset_1];
   let score = u32(evalPosition(&board)) ^ (1u<<31u);
   let prev_index = getPrev(&board, globals.move_index);
 
   switch globals.to_move {
     case 0x8u: {
-      atomicMax(&parent_evals[prev_index], score);
+      atomicMax(&parent_evals[prev_index + globals.buf_offset_2], score);
     }
     case 0x0u: {
-      atomicMin(&parent_evals[prev_index], score);
+      atomicMin(&parent_evals[prev_index + globals.buf_offset_2], score);
     }
     default: {}
   }

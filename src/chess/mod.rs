@@ -11,6 +11,7 @@ use std::{fmt::Display, cmp::Ordering};
 use std::ascii;
 
 use ::ascii::ToAsciiChar;
+use bytemuck::{Pod, Zeroable};
 use float_ord::FloatOrd;
 pub use state::GameState;
 pub use piece::{Piece, PieceType, Side};
@@ -116,12 +117,13 @@ impl Move {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct EvalScore(i32);
+#[derive(Clone, Copy, PartialEq, Eq, Pod, Zeroable)]
+#[repr(transparent)]
+pub struct EvalScore(u32);
 
 impl EvalScore {
     pub fn from(i: i32) -> Self {
-        return Self(i);
+        return Self(bytemuck::cast::<_, u32>(i) ^ (1<<31));
     }
 
     pub fn worst(side: Side) -> Self {
@@ -139,9 +141,13 @@ impl EvalScore {
         }
     }
 
+    fn to_i32(&self) -> i32 {
+        bytemuck::cast::<_, i32>(self.0 ^ (1<<31))
+    }
+
     /// The score in centipawns, with positive being good for white, and negative being good for black
     pub fn to_centipawn(&self) -> i64 {
-        return (self.0) as i64;
+        return (self.to_i32()) as i64;
     }
 
     /// The score in centipawns, relative to the specified side.
@@ -153,4 +159,10 @@ impl EvalScore {
 
 impl BufferData for EvalScore {
     const SIZE: usize = size_of::<u32>();
+}
+
+impl Debug for EvalScore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("EvalScore").field(&self.to_i32()).finish()
+    }
 }

@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::{Device, PipelineLayoutDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, ComputePipeline, include_wgsl, ShaderModuleDescriptor, BindGroupLayout, BindGroup, BindGroupDescriptor, BindGroupEntry, DynamicOffset};
 
-use crate::{gpu::{GpuGlobalData, GpuAllocations}, buffers::AllocToken, chess::GpuBoard};
+use crate::{gpu::{GpuGlobalData, GpuAllocations}, buffers::AllocToken, chess::{GpuBoard, EvalScore}};
 
 pub const WORKGROUP_SIZE: u64 = 64;
 
@@ -292,6 +292,124 @@ impl ExpansionBindGroupMngr {
         let o = BuffOffsets {
             buf_offset_0: buffers.input.start_elem(),
             buf_offset_1: buffers.output.start_elem(),
+            buf_offset_2: 0,
+            buf_offset_3: 0,
+        };
+        return BindOut(expansion_bind, o);
+    }
+}
+
+pub struct EvalContractBindGroupMngr {
+    
+}
+
+pub struct EvalContractBuffers<'a> {
+    pub parent_evals_boards: &'a AllocToken<EvalScore>,
+    pub child_boards: &'a AllocToken<GpuBoard>,
+}
+
+impl EvalContractBindGroupMngr {
+    pub fn create(engine: &GpuGlobalData, alloc: &GpuAllocations, buffers: EvalContractBuffers) -> BindOut<2> {
+        let expansion_bind = engine.device.create_bind_group(
+            &BindGroupDescriptor {
+                label: None,
+                layout: &engine.eval_contract_shader.0,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer(buffers.child_boards.buffer(&alloc.boards).as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Buffer(buffers.parent_evals_boards.buffer(&alloc.evals).as_entire_buffer_binding())
+                    },
+                ]
+            }
+        );
+        let o = BuffOffsets {
+            buf_offset_0: 0,
+            buf_offset_1: buffers.child_boards.start_elem(),
+            buf_offset_2: buffers.parent_evals_boards.start_elem(),
+            buf_offset_3: 0,
+        };
+        return BindOut(expansion_bind, o);
+    }
+}
+
+pub struct ContractBindGroupMngr {
+    
+}
+
+pub struct ContractBuffers<'a> {
+    pub parent_evals_boards: &'a AllocToken<EvalScore>,
+    pub child_boards: &'a AllocToken<GpuBoard>,
+}
+
+impl ContractBindGroupMngr {
+    pub fn create(engine: &GpuGlobalData, alloc: &GpuAllocations, buffers: ContractBuffers) -> BindOut<2> {
+        let expansion_bind = engine.device.create_bind_group(
+            &BindGroupDescriptor {
+                label: None,
+                layout: &engine.contract_shader.0,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer(buffers.child_boards.buffer(&alloc.boards).as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Buffer(buffers.parent_evals_boards.buffer(&alloc.evals).as_entire_buffer_binding())
+                    },
+                ]
+            }
+        );
+        let o = BuffOffsets {
+            buf_offset_0: 0,
+            buf_offset_1: buffers.child_boards.start_elem(),
+            buf_offset_2: buffers.parent_evals_boards.start_elem(),
+            buf_offset_3: 0,
+        };
+        return BindOut(expansion_bind, o);
+    }
+}
+
+pub struct FillMaxBindGroupMngr {
+    
+}
+
+pub struct FillMaxBuffers<'a> {
+    pub boards: &'a AllocToken<EvalScore>,
+}
+
+impl FillMaxBindGroupMngr {
+    pub fn create(engine: &GpuGlobalData, alloc: &GpuAllocations, buffers: FillMaxBuffers) -> BindOut<2> {
+        let expansion_bind = engine.device.create_bind_group(
+            &BindGroupDescriptor {
+                label: None,
+                layout: &engine.fill_max_shader.0,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer(buffers.boards.buffer(&alloc.evals).as_entire_buffer_binding())
+                    },
+                ]
+            }
+        );
+        let o = BuffOffsets {
+            buf_offset_0: 0,
+            buf_offset_1: buffers.boards.start_elem(),
             buf_offset_2: 0,
             buf_offset_3: 0,
         };

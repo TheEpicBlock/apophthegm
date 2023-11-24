@@ -286,28 +286,27 @@ async fn multiple_expansions() {
     assert_eq!(boards_len, 4);
 }
 
-// #[tokio::test]
-// async fn test_eval() {
-//     // It should be obviously better to move the pawn two spots than just one
-//     let board = GameState::from_fen("8/p7/8/8/8/8/4P2/8 w KQkq - 0 1");
-//     let mut engine = init_gpu_evaluator(&GPU_ADAPTER).await;
-//     let pass_1 = engine.create_combo(0, 1);
-//     let pass_2 = engine.create_combo(1, 2);
-//     engine.set_input(&pass_1, [convert(&board.get_board())]).await;
-//     engine.run_expansion(&pass_1, Side::White).await;
-//     engine.run_expansion(&pass_2, Side::Black).await;
-//     engine.run_eval_contract(&pass_2, Side::Black, 0).await;
-
-//     let evals: Vec<_> = engine.get_output_evals(&pass_2).await.iter().collect();
-//     assert_eq!(evals.len(), 2);
-//     let best = evals.iter().max_by(|a, b| EvalScore::better(a, b, Side::White)).unwrap();
-//     let worst = evals.iter().min_by(|a, b| EvalScore::better(a, b, Side::White)).unwrap();
-//     assert!(best.to_centipawn() > worst.to_centipawn());
-//     assert_eq!(evals, [EvalScore::from(0), EvalScore::from(50)]); // Might change in the future
-
-//     // Test contract
-//     engine.run_contract(&pass_1, Side::White, 0).await;
-//     let evals: Vec<_> = engine.get_output_evals(&pass_1).await.iter().collect();
-//     assert_eq!(evals.len(), 1);
-//     assert_eq!(evals[0], *best);
-// }
+#[tokio::test]
+async fn test_eval() {
+    // It should be obviously better to move the pawn two spots than just one
+    let board = GameState::from_fen("8/p7/8/8/8/8/4P2/8 w KQkq - 0 1");
+    let mut engine = init_gpu_evaluator(&GPU_ADAPTER).await;
+    let mut allocator = GpuAllocations::init(engine.device.clone());
+    let mut tree = GpuTree::new(&engine, &mut allocator);
+    tree.init_layer_from_state(board);
+    tree.expand_last_layer().await;
+    tree.expand_last_layer().await;
+    tree.contract_eval(2).await;
+    let evals: Vec<EvalScore> = tree.view_evals(1).await.cast_t().into_iter().map(|x| x.clone()).collect();
+    assert_eq!(evals.len(), 2);
+    assert_eq!(evals, [EvalScore::from(0), EvalScore::from(50)]); // Might change in the future
+    let best = evals.iter().max_by(|a, b| EvalScore::better(a, b, Side::White)).unwrap();
+    let worst = evals.iter().min_by(|a, b| EvalScore::better(a, b, Side::White)).unwrap();
+    assert!(best.to_centipawn() > worst.to_centipawn());
+    
+    // Test contract
+    // engine.run_contract(&pass_1, Side::White, 0).await;
+    // let evals: Vec<_> = engine.get_output_evals(&pass_1).await.iter().collect();
+    // assert_eq!(evals.len(), 1);
+    // assert_eq!(evals[0], *best);
+}

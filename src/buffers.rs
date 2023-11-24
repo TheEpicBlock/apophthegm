@@ -114,8 +114,8 @@ impl<T: BufferData> BufferManager<T> {
     }
 
     pub async fn view(&self, queue: &Queue, token: &AllocToken<T>, bounds: Range<u32>) -> Result<BufView<'_, T>, BufferAsyncError> {
-        assert!((0..token.len()).contains(&bounds.start));
-        assert!((0..token.len()).contains(&bounds.end));
+        assert!((0..token.len()).contains(&bounds.start), "{:?} is not contained in {:?}", bounds, 0..token.len());
+        assert!((0..token.len()+1).contains(&bounds.end), "{:?} is not contained in {:?}", bounds, 0..token.len());
         let bound_len = bounds.end-bounds.start;
 
         if bound_len == 0 {

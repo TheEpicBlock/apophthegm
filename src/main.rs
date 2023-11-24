@@ -5,6 +5,7 @@
 #![feature(impl_trait_in_assoc_type)]
 #![feature(never_type)]
 #![feature(let_chains)]
+#![feature(get_many_mut)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
