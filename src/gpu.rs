@@ -13,10 +13,8 @@ use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsag
 
 use crate::buffers::BufferManager;
 use crate::chess::{GpuBoard, Side, EvalScore};
-use crate::shaders::{Shader, self, BuffOffsets};
+use crate::shaders::{Shader, self, BuffOffsets, WORKGROUP_SIZE};
 use crate::misc::SliceExtension;
-
-const WORKGROUP_SIZE: u64 = 64;
 
 pub struct GpuGlobalData {
     pub device: Rc<Device>,
@@ -40,34 +38,6 @@ impl GpuGlobalData {
         data[8..12].copy_from_slice(bytemuck::bytes_of(&move_num));
         data[12..28].copy_from_slice(bytemuck::bytes_of(&offsets));
         self.queue.write_buffer(&self.global_data, 0, &data);
-    }
-}
-
-pub struct SelfClosingBufferView<'a, const N: usize, F> {
-    buf_view: Option<BufferView<'a>>,
-    amount: usize,
-    buf: &'a Buffer,
-    func: F,
-}
-
-impl <const N: usize, F, T> SelfClosingBufferView<'_, N, F> where F: Fn(&[u8; N]) -> T {
-    pub fn get_size(&self) -> usize {
-        return self.amount;
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = T> + '_ {
-        // Safety: buf_view is always Some at this point
-        let chunks = self.buf_view.as_ref().unwrap().as_chunks::<N>().0;
-        let iter = chunks.iter().take(self.amount).map(|b| {(self.func)(b)});
-        return iter;
-    }
-}
-
-impl <const N: usize, F> Drop for SelfClosingBufferView<'_, N, F> {
-    fn drop(&mut self) {
-        let view = self.buf_view.take();
-        drop(view);
-        self.buf.unmap();
     }
 }
 
@@ -177,118 +147,6 @@ impl<'dev> GpuAllocations {
         let boards = BufferManager::create(device.clone(), boards_per_buf, "Board storage");
         let evals = BufferManager::create(device.clone(), boards_per_buf, "Eval storage");
 
-        return Self {boards, evals, boards_per_buf,buffer_size};
+        return Self {boards, evals, boards_per_buf, buffer_size};
     }
-
-    // pub fn create_combo(&self, parent: u8, child: u8, engine: &GpuChessEvaluator) -> BufferCombo {
-    //     let expansion_bind = engine.device.create_bind_group(
-    //         &BindGroupDescriptor {
-    //             label: None,
-    //             layout: &engine.expand_shader.0,
-    //             entries: &[
-    //                 BindGroupEntry {
-    //                     binding: 0,
-    //                     resource: wgpu::BindingResource::Buffer(self.board_buffers[parent as usize].as_entire_buffer_binding())
-    //                 },
-    //                 BindGroupEntry {
-    //                     binding: 1,
-    //                     resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
-    //                 },
-    //                 BindGroupEntry {
-    //                     binding: 2,
-    //                     resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
-    //                 },
-    //                 BindGroupEntry {
-    //                     binding: 3,
-    //                     resource: wgpu::BindingResource::Buffer(engine.out_index.as_entire_buffer_binding())
-    //                 },
-    //             ]
-    //         }
-    //     );
-
-    //     let eval_contract_bind = engine.device.create_bind_group(
-    //         &BindGroupDescriptor {
-    //             label: None,
-    //             layout: &engine.eval_contract_shader.0,
-    //             entries: &[
-    //                 BindGroupEntry {
-    //                     binding: 0,
-    //                     resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
-    //                 },
-    //                 BindGroupEntry {
-    //                     binding: 1,
-    //                     resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
-    //                 },
-    //                 BindGroupEntry {
-    //                     binding: 2,
-    //                     resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
-    //                 },
-    //             ]
-    //         }
-    //     );
-
-    //     let contract_bind = engine.device.create_bind_group(
-    //         &BindGroupDescriptor {
-    //             label: None,
-    //             layout: &engine.contract_shader.0,
-    //             entries: &[
-    //                 BindGroupEntry {
-    //                     binding: 0,
-    //                     resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
-    //                 },
-    //                 BindGroupEntry {
-    //                     binding: 1,
-    //                     resource: wgpu::BindingResource::Buffer(self.board_buffers[child as usize].as_entire_buffer_binding())
-    //                 },
-    //                 BindGroupEntry {
-    //                     binding: 2,
-    //                     resource: wgpu::BindingResource::Buffer(self.eval_buffers[child as usize].as_entire_buffer_binding())
-    //                 },
-    //                 BindGroupEntry {
-    //                     binding: 3,
-    //                     resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
-    //                 },
-    //             ]
-    //         }
-    //     );
-
-    //     let fill_max_bind = engine.device.create_bind_group(
-    //         &BindGroupDescriptor {
-    //             label: None,
-    //             layout: &engine.fill_max_shader.0,
-    //             entries: &[
-    //                 BindGroupEntry {
-    //                     binding: 0,
-    //                     resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
-    //                 },
-    //                 BindGroupEntry {
-    //                     binding: 1,
-    //                     resource: wgpu::BindingResource::Buffer(self.eval_buffers[parent as usize].as_entire_buffer_binding())
-    //                 },
-    //             ]
-    //         }
-    //     );
-
-    //     return BufferCombo {
-    //         expansion_bind,
-    //         eval_contract_bind,
-    //         contract_bind,
-    //         fill_max_bind,
-    //         parent,
-    //         child,
-    //     };
-    // }
-}
-
-pub struct BufferCombo {
-    parent: u8,
-    child: u8,
-    expansion_bind: BindGroup,
-    eval_contract_bind: BindGroup,
-    contract_bind: BindGroup,
-    fill_max_bind: BindGroup,
-}
-
-fn ceil_div(a: u32, b: u64) -> u32 {
-    return (a as f64 / b as f64).ceil() as u32;
 }
