@@ -40,8 +40,8 @@ impl<T: BufferData> BufferManager<T> {
     const BRICK_SIZE: u32 = misc::lcm(T::SIZE as u32, MAP_ALIGNMENT as u32);
     const ELEMS_PER_BRICK: u32 = Self::BRICK_SIZE / T::SIZE as u32;
 
-    pub fn create(device: Rc<Device>, max_elems_per_buf: u64, label: &'static str) -> Self {
-        let max_bricks_per_buf = (max_elems_per_buf as u32 * T::SIZE as u32) / Self::BRICK_SIZE;
+    pub fn create(device: Rc<Device>, max_elems_per_buf: u32, label: &'static str) -> Self {
+        let max_bricks_per_buf = (max_elems_per_buf * T::SIZE as u32) / Self::BRICK_SIZE;
         let buffer_size = max_bricks_per_buf as u64 * Self::BRICK_SIZE as u64;
         Self {
             label,
@@ -52,7 +52,7 @@ impl<T: BufferData> BufferManager<T> {
                 usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }),
-            max_elements_per_buf: max_elems_per_buf as u32,
+            max_elements_per_buf: max_elems_per_buf,
             max_bytes_per_buf: buffer_size,
             max_bricks_per_buf,
             device,

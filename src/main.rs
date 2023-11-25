@@ -68,6 +68,7 @@ impl ThreadedEngine for MahEngine {
 
                 let mut tree = GpuTree::new(&engine, &mut allocations);
                 tree.init_layer(&[m], state.to_move.opposite());
+
                 tree.expand_last_layer().await;
                 tree.expand_last_layer().await;
                 tree.contract_eval(2).await;

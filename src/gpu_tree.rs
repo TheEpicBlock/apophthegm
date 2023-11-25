@@ -168,6 +168,14 @@ impl<'dev> GpuTree<'dev> {
 
         return view;
     }
+
+    pub fn layer(&self, layer: usize) -> LayerRef<'_> {
+        LayerRef { index: layer, tree: self }
+    }
+
+    pub fn last_layer(&self) -> LayerRef<'_> {
+        LayerRef { index: self.layers.len()-1, tree: self }
+    }
 }
 
 struct GpuTreeLayer {
@@ -193,5 +201,20 @@ impl Drop for GpuTree<'_> {
                 self.gpu_allocator.evals.dealloc(eval_buf);
             }
         });
+    }
+}
+
+pub struct LayerRef<'a> {
+    index: usize,
+    tree: &'a GpuTree<'a>,
+}
+
+impl<'a> LayerRef<'a> {
+    pub fn size(&self) -> u32 {
+        self.inner().num_boards
+    }
+
+    fn inner(&self) -> &GpuTreeLayer {
+        &self.tree.layers[self.index]
     }
 }
