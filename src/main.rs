@@ -24,9 +24,9 @@ use chess::{EvalScore, Board, MAX_MOVES};
 use float_ord::FloatOrd;
 use gpu::{init_gpu_evaluator, GpuGlobalData, GpuAllocations};
 use gpu_tree::GpuTree;
-use tokio::runtime::Handle;
+use tokio::{runtime::Handle, sync::mpsc::Sender};
 use tokio_util::task::LocalPoolHandle;
-use uci::ThreadedEngine;
+use uci::{EngineComs, UciEvalSession};
 use wgpu::{RequestAdapterOptions, DeviceDescriptor, BufferDescriptor, BufferUsages, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, BindGroupDescriptor, BindGroupLayout, BindGroupEntry, PipelineLayoutDescriptor, ShaderModule, ShaderModuleDescriptor, include_wgsl, CommandEncoderDescriptor, ComputePassDescriptor, Backends};
 
 use crate::{chess::{GameState, GpuBoard, board::{convert, self}, Side}, gpu::init_adapter};
@@ -38,20 +38,22 @@ const BUFFER_SIZE: u64 = size_of::<GpuBoard>() as u64 * BOARDS_IN_BUF;
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    uci::start_loop(MahEngine);
+    let engine_coms = start();
+    uci::start_loop(engine_coms);
 }
 
-struct MahEngine;
+fn start() -> impl EngineComs {
+    let thread = LocalPoolHandle::new(1);
+    let (sender, mut receiver) = tokio::sync::mpsc::channel::<(Arc<UciEvalSession>, GameState)>(1);
+    thread.spawn_pinned(|| {async move {
+        let adapter = init_adapter().await;
+        let engine = init_gpu_evaluator(&adapter).await;
+        let mut allocations = GpuAllocations::init(engine.device.clone());
 
-impl ThreadedEngine for MahEngine {
-    fn spawn_lookup(&self, coms: Arc<uci::UciCommunication>, state: GameState) {
-        let pool = LocalPoolHandle::new(1);
-        let task = pool.spawn_pinned(|| {async move {
-            let adapter = init_adapter().await;
-            let engine = init_gpu_evaluator(&adapter).await;
-            let mut allocations = GpuAllocations::init(engine.device.clone());
-
+        loop {
+            let Some((coms, state)) = receiver.recv().await else {break;};
             let mut tree = GpuTree::new(&engine, &mut allocations);
+
             tree.init_layer_from_state(&state);
             tree.expand_last_layer().await;
             let first_moves = tree.view_boards_last().await.cast_t().to_vec();
@@ -86,8 +88,21 @@ impl ThreadedEngine for MahEngine {
                 }
             }
             coms.stop();
-        }});
-        tokio::spawn(task);
+        }
+    }});
+
+    Coms {
+        sender
+    }
+}
+
+struct Coms {
+    sender: Sender<(Arc<UciEvalSession>, GameState)>
+}
+
+impl EngineComs for Coms {
+    fn start_session(&mut self, coms: Arc<UciEvalSession>, state: GameState) {
+        self.sender.try_send((coms, state)).unwrap();
     }
 }
 

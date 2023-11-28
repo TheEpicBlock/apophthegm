@@ -2,7 +2,7 @@ use std::{io, sync::{atomic::{AtomicBool, AtomicU16, AtomicU64}, Mutex, Arc}, rc
 
 use crate::chess::{GameState, Move, EvalScore, Side};
 
-pub fn start_loop(engine: impl ThreadedEngine) -> ! {
+pub fn start_loop(mut engine: impl EngineComs) -> ! {
     let mut buffer = String::new();
     let stdin = io::stdin();
     stdin.read_line(&mut buffer).unwrap();
@@ -63,7 +63,7 @@ pub fn start_loop(engine: impl ThreadedEngine) -> ! {
                     panic!("Can't search if you don't give me a position D:");
                 }
 
-                let coms = Arc::new(UciCommunication {
+                let coms = Arc::new(UciEvalSession {
                     to_move: gamestate.as_ref().unwrap().to_move,
                     stopped: AtomicBool::new(false),
                     depth: AtomicU16::new(0),
@@ -72,7 +72,7 @@ pub fn start_loop(engine: impl ThreadedEngine) -> ! {
                 });
                 current_search = Some(coms.clone());
 
-                engine.spawn_lookup(coms.clone(), gamestate.clone().unwrap());
+                engine.start_session(coms.clone(), gamestate.clone().unwrap());
             }
             Some("stop") => {
                 let Some(ref coms) = current_search else { panic!("no active search") };
@@ -88,7 +88,7 @@ pub fn start_loop(engine: impl ThreadedEngine) -> ! {
     }
 }
 
-pub struct UciCommunication{
+pub struct UciEvalSession {
     to_move: Side,
     stopped: AtomicBool,
     depth: AtomicU16,
@@ -96,7 +96,7 @@ pub struct UciCommunication{
     best: Mutex<Option<Move>>
 }
 
-impl UciCommunication {
+impl UciEvalSession {
     pub fn set_best(&self, m: Move, score: EvalScore) {
         if self.is_stopped() {
             return;
@@ -136,6 +136,6 @@ impl UciCommunication {
     }
 }
 
-pub trait ThreadedEngine {
-    fn spawn_lookup(&self, coms: Arc<UciCommunication>, state: GameState);
+pub trait EngineComs {
+    fn start_session(&mut self, coms: Arc<UciEvalSession>, state: GameState);
 }
