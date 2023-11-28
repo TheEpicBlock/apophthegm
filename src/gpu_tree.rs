@@ -9,11 +9,11 @@ use crate::{gpu::{GpuGlobalData, GpuAllocations}, chess::{board::{GpuBoard, self
 pub struct GpuTree<'dev> {
     layers: Vec<GpuTreeLayer>,
     engine: &'dev GpuGlobalData,
-    gpu_allocator: &'dev mut GpuAllocations,
+    gpu_allocator: &'dev GpuAllocations,
 }
 
 impl<'dev> GpuTree<'dev> {
-    pub fn new(engine: &'dev GpuGlobalData, allocator: &'dev mut GpuAllocations) -> Self {
+    pub fn new(engine: &'dev GpuGlobalData, allocator: &'dev GpuAllocations) -> Self {
         Self {
             layers: Vec::new(),
             engine,
@@ -28,7 +28,7 @@ impl<'dev> GpuTree<'dev> {
     pub fn init_layer(&mut self, boards: &[GpuBoard], to_move: Side) {
         let alloc = self.gpu_allocator.boards.allocate(boards.len() as u32);
         let data = bytemuck::cast_slice(boards);
-        self.engine.queue.write_buffer(alloc.buffer(&self.gpu_allocator.boards), alloc.start(), data);
+        self.engine.queue.write_buffer(&alloc.buffer(&self.gpu_allocator.boards), alloc.start(), data);
         self.layers.push(GpuTreeLayer {
             num_boards: boards.len() as u32,
             to_move,
@@ -101,7 +101,7 @@ impl<'dev> GpuTree<'dev> {
     async fn contract_generic(&mut self, layer: usize, do_eval: bool) {
         let [parent_layer, child_layer] = self.layers.get_many_mut([layer - 1, layer]).unwrap();
 
-        let parent_eval = parent_layer.get_or_create_eval_buf(&mut self.gpu_allocator);
+        let parent_eval = parent_layer.get_or_create_eval_buf(&self.gpu_allocator);
         let fill_max_bind = FillMaxBindGroupMngr::create(self.engine, &self.gpu_allocator, FillMaxBuffers {
             boards: parent_eval,
         });
@@ -133,7 +133,7 @@ impl<'dev> GpuTree<'dev> {
         } else {
             match NonZeroU64::try_from(parent_layer.board_buf.byte_len()) {
                 Ok(size) => {
-                    command_encoder.clear_buffer(parent_layer.board_buf.buffer(&self.gpu_allocator.boards), parent_layer.board_buf.start(), Some(size));
+                    command_encoder.clear_buffer(&parent_layer.board_buf.buffer(&self.gpu_allocator.boards), parent_layer.board_buf.start(), Some(size));
                 },
                 Err(_) => {},
             }
@@ -186,7 +186,7 @@ struct GpuTreeLayer {
 }
 
 impl GpuTreeLayer {
-    pub fn get_or_create_eval_buf(&mut self, alloc: &mut GpuAllocations) -> &AllocToken<EvalScore> {
+    pub fn get_or_create_eval_buf(&mut self, alloc: &GpuAllocations) -> &AllocToken<EvalScore> {
         self.eval_buf.get_or_insert_with(|| {
             alloc.evals.allocate(self.num_boards)
         })
