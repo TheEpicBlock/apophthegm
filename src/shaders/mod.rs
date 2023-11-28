@@ -391,7 +391,7 @@ pub struct FillMaxBindGroupMngr {
 }
 
 pub struct FillMaxBuffers<'a> {
-    pub boards: &'a AllocToken<EvalScore>,
+    pub evals: &'a AllocToken<EvalScore>,
 }
 
 impl FillMaxBindGroupMngr {
@@ -407,14 +407,14 @@ impl FillMaxBindGroupMngr {
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Buffer(buffers.boards.buffer(&alloc.evals).as_entire_buffer_binding())
+                        resource: wgpu::BindingResource::Buffer(buffers.evals.buffer(&alloc.evals).as_entire_buffer_binding())
                     },
                 ]
             }
         );
         let o = BuffOffsets {
             buf_offset_0: 0,
-            buf_offset_1: buffers.boards.start_elem(),
+            buf_offset_1: buffers.evals.start_elem(),
             buf_offset_2: 0,
             buf_offset_3: 0,
         };

@@ -15,5 +15,5 @@ fn fill_pass(
   if (global_id.x >= globals.input_size) {
     return;
   }
-  buf[global_id.x] = 0xFFFFFFFFu;
+  buf[global_id.x + globals.buf_offset_1] = 0xFFFFFFFFu;
 }

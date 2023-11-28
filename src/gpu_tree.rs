@@ -111,7 +111,7 @@ impl<'dev> GpuTree<'dev> {
 
         let parent_eval = parent_layer.get_or_create_eval_buf(&self.gpu_allocator);
         let fill_max_bind = FillMaxBindGroupMngr::create(self.engine, &self.gpu_allocator, FillMaxBuffers {
-            boards: parent_eval,
+            evals: parent_eval,
         });
         
         let generic_contract_bind = if do_eval {
