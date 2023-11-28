@@ -9,7 +9,7 @@ use super::{Board, board::convert, GpuBoard};
 
 // Only create an adapter once, to ensure no threading issues present themselves
 #[ctor::ctor]
-static GPU_ADAPTER: Adapter = {
+pub static GPU_ADAPTER: Adapter = {
     init_adapter().block_on()
 };
 

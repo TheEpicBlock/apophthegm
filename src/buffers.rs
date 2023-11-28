@@ -202,7 +202,7 @@ impl<T> AllocToken<T> where T: BufferData {
         self.offset
     }
 
-    /// The last address in the buffer of this allocation slice
+    /// The last address (exclusive) in the buffer of this allocation slice
     pub fn end(&self) -> BufferAddress {
         self.offset + self.byte_len()
     }
@@ -284,5 +284,48 @@ impl<'a, T: BufferData> AsRef<[u8]> for BufView<'a, T> {
 impl<'a, T: BufferData + bytemuck::Pod> BufView<'a, T> {
     pub fn cast_t(&self) -> &[T] {
         self.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{buffers::BufferManager, chess::{test::GPU_ADAPTER, EvalScore}, gpu::init_gpu_evaluator};
+
+    #[tokio::test]
+    async fn test() {
+        let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
+        let mngr = BufferManager::<EvalScore>::create(engine.device, 512, "test buf");
+        let alloc_a = mngr.allocate(1);
+        let alloc_b = mngr.allocate(1);
+        println!("Alloc A {} .. {}", alloc_a.start(), alloc_a.end());
+        println!("Alloc B {} .. {}", alloc_b.start(), alloc_b.end());
+        assert!(alloc_a.start() < alloc_a.end());
+        assert!(alloc_b.start() < alloc_b.end());
+        assert!(alloc_a.end() <= alloc_b.start() || alloc_b.end() <= alloc_a.start());
+        mngr.dealloc(alloc_b);
+        let alloc_b = mngr.allocate(1);
+        println!("Alloc B2 {} .. {}", alloc_b.start(), alloc_b.end());
+        assert!(alloc_a.end() <= alloc_b.start() || alloc_b.end() <= alloc_a.start());
+        
+        // Not part of the contract for the manager, but a sanity check to see if buffers are being cleared
+        let prev_a_start = alloc_a.start();
+        let prev_a_end = alloc_a.end();
+        mngr.dealloc(alloc_a);
+        mngr.dealloc(alloc_b);
+        let alloc_a = mngr.allocate(1);
+        println!("Alloc A2 {} .. {}", alloc_a.start(), alloc_a.end());
+        assert_eq!(alloc_a.start(), prev_a_start);
+        assert_eq!(alloc_a.end(), prev_a_end);
+    }
+
+    #[tokio::test]
+    async fn test_big() {
+        let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
+        let mngr = BufferManager::<EvalScore>::create(engine.device, 512, "test buf");
+        let alloc_a = mngr.allocate(300);
+        let alloc_b = mngr.allocate(300);
+        // Both of these should be in a new buffer (they don't fit into a single one)
+        assert_eq!(alloc_a.start(), 0);
+        assert_eq!(alloc_b.start(), 0);
     }
 }
