@@ -61,6 +61,7 @@ impl<T: BufferData> BufferManager<T> {
     }
 
     fn new_buffer(&self) -> usize {
+        info!("Allocating new buffer for struct of size {}", T::SIZE);
         let mut buffers = self.buffers.borrow_mut();
         let index = buffers.len();
         buffers.push(BufData {

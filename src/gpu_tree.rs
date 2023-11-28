@@ -98,6 +98,14 @@ impl<'dev> GpuTree<'dev> {
         self.contract_generic(layer, false).await
     }
 
+    pub async fn contract_all(&mut self) {
+        let last = self.last_layer().index;
+        self.contract_eval(last).await;
+        for i in (1..last).into_iter().rev() {
+            self.contract(i).await;
+        }
+    }
+
     async fn contract_generic(&mut self, layer: usize, do_eval: bool) {
         let [parent_layer, child_layer] = self.layers.get_many_mut([layer - 1, layer]).unwrap();
 
@@ -212,6 +220,10 @@ pub struct LayerRef<'a> {
 impl<'a> LayerRef<'a> {
     pub fn size(&self) -> u32 {
         self.inner().num_boards
+    }
+
+    pub fn depth(&mut self) -> usize {
+        self.index
     }
 
     fn inner(&self) -> &GpuTreeLayer {

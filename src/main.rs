@@ -20,7 +20,7 @@ mod uci;
 use core::slice::SlicePattern;
 use std::{mem::size_of, thread, time::Duration, rc::Rc, sync::Arc, cell::RefCell};
 
-use chess::{EvalScore, Board};
+use chess::{EvalScore, Board, MAX_MOVES};
 use float_ord::FloatOrd;
 use gpu::{init_gpu_evaluator, GpuGlobalData, GpuAllocations};
 use gpu_tree::GpuTree;
@@ -66,13 +66,19 @@ impl ThreadedEngine for MahEngine {
                     continue;
                 }
 
-                let mut tree = GpuTree::new(&engine, &mut allocations);
+                let mut tree = GpuTree::new(&engine, &allocations);
                 tree.init_layer(&[m], state.to_move.opposite());
 
-                tree.expand_last_layer().await;
-                tree.expand_last_layer().await;
-                tree.contract_eval(2).await;
-                tree.contract(1).await;
+                loop {
+                    if allocations.fits(tree.last_layer().size() * MAX_MOVES) {
+                        tree.expand_last_layer().await;
+                        coms.report_depth_and_nodes(tree.last_layer().depth() as u16, tree.last_layer().size() as u64);
+                    } else {
+                        break;
+                    }
+                }
+                tree.contract_all().await;
+
                 let result = tree.view_evals(0).await.cast_t()[0];
                 if EvalScore::better(&result, &best_score, state.to_move).is_ge() {
                     coms.set_best(board::find_move(&state.get_board(), &m).unwrap(), result);
