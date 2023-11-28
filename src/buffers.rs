@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, rc::Rc, sync::atomic::AtomicI32, ops::{RangeBounds, Range, Index, Deref}, cell::{RefCell, Ref}, borrow::BorrowMut};
 
-use log::info;
+use log::{info, debug};
 use wgpu::{Buffer, Device, BufferUsages, BufferDescriptor, BufferAddress, MapMode, BufferAsyncError, BufferView, CommandEncoderDescriptor, Queue, MAP_ALIGNMENT, BufferBinding};
 
 use crate::{shaders::WORKGROUP_SIZE, misc::{SliceExtension, self}};
@@ -81,6 +81,7 @@ impl<T: BufferData> BufferManager<T> {
     /// Allocates a buffer,
     /// the size is measured in number of elements
     pub fn allocate(&self, size: u32) -> AllocToken<T> {
+        debug!("Allocation {size} elements with size {}", T::SIZE);
         let bricks_needed = misc::ceil_div(size, Self::ELEMS_PER_BRICK as u64);
 
         let buffers = self.buffers.borrow();
@@ -113,6 +114,7 @@ impl<T: BufferData> BufferManager<T> {
     }
 
     pub fn dealloc<'mngr>(&self, token: AllocToken<T>) {
+        debug!("Freeing {} elements with size {}", token.len(), T::SIZE);
         let buf = &mut self.buffers.borrow_mut()[token.buffer_index];
         buf.allocations -= 1;
         if buf.allocations == 0 {
