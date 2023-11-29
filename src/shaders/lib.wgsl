@@ -24,5 +24,5 @@ fn getPiece(board: ptr<function, Board>, x: u32, y: u32) -> u32 {
 }
 
 fn getPrev(board: ptr<function, Board>, index: u32) -> u32 {
-  return (*board).pieces[8] & (0xFFFFu);
+  return (*board).pieces[8];
 }

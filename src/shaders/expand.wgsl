@@ -187,7 +187,5 @@ fn movePiece(board: ptr<function, Board>, piece: u32, x: u32, y: u32, xNew: u32,
 }
 
 fn setPrev(board: ptr<function, Board>, id: u32) {
-  // id is assumed to be a u16
-  (*board).pieces[8] &= ~(0xFFFFu);
-  (*board).pieces[8] |= id;
+  (*board).pieces[8] = id;
 }
