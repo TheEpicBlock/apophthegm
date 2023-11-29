@@ -43,6 +43,7 @@ impl<T: BufferData> BufferManager<T> {
     pub fn create(device: Rc<Device>, max_elems_per_buf: u32, label: &'static str) -> Self {
         let max_bricks_per_buf = (max_elems_per_buf * T::SIZE as u32) / Self::BRICK_SIZE;
         let buffer_size = max_bricks_per_buf as u64 * Self::BRICK_SIZE as u64;
+        debug!("({label})");
         Self {
             label,
             buffers: RefCell::new(Vec::new()),
@@ -61,7 +62,7 @@ impl<T: BufferData> BufferManager<T> {
     }
 
     fn new_buffer(&self) -> usize {
-        info!("Allocating new buffer for struct of size {}", T::SIZE);
+        info!("({}) Allocating new buffer", self.label);
         let mut buffers = self.buffers.borrow_mut();
         let index = buffers.len();
         buffers.push(BufData {
@@ -81,7 +82,6 @@ impl<T: BufferData> BufferManager<T> {
     /// Allocates a buffer,
     /// the size is measured in number of elements
     pub fn allocate(&self, size: u32) -> AllocToken<T> {
-        debug!("Allocation {size} elements with size {}", T::SIZE);
         let bricks_needed = misc::ceil_div(size, Self::ELEMS_PER_BRICK as u64);
 
         let buffers = self.buffers.borrow();
@@ -103,6 +103,8 @@ impl<T: BufferData> BufferManager<T> {
         let offset = buf.allocated_bricks as u64 * Self::BRICK_SIZE as u64;
         buf.allocated_bricks += bricks_needed;
 
+        debug!("({}) Allocated {size} elements ({} bricks, {} bytes) to buffer #{buf_index} at {offset}", self.label, bricks_needed, bricks_needed as u64 * Self::BRICK_SIZE as u64);
+
         AllocToken {
             buffer_index: buf_index,
             offset,
@@ -114,7 +116,7 @@ impl<T: BufferData> BufferManager<T> {
     }
 
     pub fn dealloc<'mngr>(&self, token: AllocToken<T>) {
-        debug!("Freeing {} elements with size {}", token.len(), T::SIZE);
+        debug!("({}) Freeing {} elements ({} bricks, {} bytes) from buffer #{} at {}", self.label, token.len(), token.len, token.byte_len(), token.buffer_index, token.offset);
         let buf = &mut self.buffers.borrow_mut()[token.buffer_index];
         buf.allocations -= 1;
         if buf.allocations == 0 {

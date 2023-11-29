@@ -117,7 +117,7 @@ impl Move {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Pod, Zeroable)]
+#[derive(Clone, Copy, PartialEq, Eq, Pod, Zeroable, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct EvalScore(u32);
 
@@ -154,6 +154,10 @@ impl EvalScore {
     /// Positive numbers are good for the side specified, negative numbers are bad.
     pub fn centipawn_relative(&self, side: Side) -> i64 {
         return self.to_centipawn() * (if side == Side::White {1} else {-1});
+    }
+
+    pub fn raw(&self) -> u32 {
+        self.0
     }
 }
 

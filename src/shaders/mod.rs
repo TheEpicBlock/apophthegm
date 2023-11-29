@@ -200,7 +200,7 @@ pub fn contract(device: &Device) -> Shader {
                 }
             )),
             module: &device.create_shader_module(include_shader!("contract.wgsl")),
-            entry_point: "eval_contract_pass"
+            entry_point: "contract_pass"
         }
     );
 

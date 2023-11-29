@@ -8,7 +8,7 @@ var<storage, read_write> child_evals: array<u32>;
 var<storage, read_write> parent_evals: array<atomic<u32>>;
 
 @compute @workgroup_size(64)
-fn eval_contract_pass(
+fn contract_pass(
   @builtin(global_invocation_id)
   global_id : vec3u,
 

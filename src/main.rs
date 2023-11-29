@@ -52,6 +52,7 @@ fn start() -> impl EngineComs {
 
         loop {
             let Some((coms, state)) = receiver.recv().await else {break;};
+            engine.device.start_capture();
             let mut tree = GpuTree::new(&engine, &mut allocations);
 
             tree.init_layer_from_state(&state);
@@ -60,7 +61,7 @@ fn start() -> impl EngineComs {
             drop(tree);
 
             let mut best_score = EvalScore::worst(state.to_move);
-            for m in first_moves {
+            for m in first_moves.into_iter().take(1) {
                 if coms.is_stopped() {
                     break;
                 }
@@ -87,6 +88,7 @@ fn start() -> impl EngineComs {
                     best_score = result;
                 }
             }
+            engine.device.stop_capture();
             coms.stop();
         }
     }});

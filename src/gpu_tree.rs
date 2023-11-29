@@ -127,7 +127,6 @@ impl<'dev> GpuTree<'dev> {
             })
         };
 
-        let mut command_encoder = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
         if parent_layer.to_move == Side::Black {
             // We should be able to optimize this and combine the data for these passes, so we don't need two command encoders
             let mut command_encoder2 = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
@@ -138,9 +137,12 @@ impl<'dev> GpuTree<'dev> {
             pass_encoder.dispatch_workgroups(ceil_div(parent_layer.num_boards, WORKGROUP_SIZE), 1, 1);
             drop(pass_encoder);
             self.engine.queue.submit([command_encoder2.finish()]);
-        } else {
+        }
+        let mut command_encoder = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
+        if parent_layer.to_move == Side::White {
             match NonZeroU64::try_from(parent_layer.board_buf.byte_len()) {
                 Ok(size) => {
+                    command_encoder.insert_debug_marker("set 0");
                     command_encoder.clear_buffer(&parent_layer.board_buf.buffer(&self.gpu_allocator.boards), parent_layer.board_buf.start(), Some(size));
                 },
                 Err(_) => {},
@@ -175,6 +177,13 @@ impl<'dev> GpuTree<'dev> {
         let view = self.gpu_allocator.evals.view(&self.engine.queue, &layer.eval_buf.as_ref().unwrap(), 0..layer.num_boards).await.unwrap();
 
         return view;
+    }
+
+    pub async fn debug_evals(&self, layer: usize) {
+        let e = self.view_evals(layer).await;
+        let min = e.cast_t().iter().min().unwrap();
+        let max = e.cast_t().iter().max().unwrap();
+        println!("Eval buffer for layer {} contains values from {}..{} and is sized {}", layer, min.raw(), max.raw(), e.cast_t().len())
     }
 
     pub fn layer(&self, layer: usize) -> LayerRef<'_> {
