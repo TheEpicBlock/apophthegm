@@ -109,6 +109,8 @@ impl<'dev> GpuTree<'dev> {
     async fn contract_generic(&mut self, layer: usize, do_eval: bool) {
         let [parent_layer, child_layer] = self.layers.get_many_mut([layer - 1, layer]).unwrap();
 
+        let to_move = parent_layer.to_move;
+        let parent_num_boards = parent_layer.num_boards;
         let parent_eval = parent_layer.get_or_create_eval_buf(&self.gpu_allocator);
         let fill_max_bind = FillMaxBindGroupMngr::create(self.engine, &self.gpu_allocator, FillMaxBuffers {
             evals: parent_eval,
@@ -127,29 +129,28 @@ impl<'dev> GpuTree<'dev> {
             })
         };
 
-        if parent_layer.to_move == Side::Black {
+        if to_move == Side::Black {
             // We should be able to optimize this and combine the data for these passes, so we don't need two command encoders
             let mut command_encoder2 = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
             let mut pass_encoder = command_encoder2.begin_compute_pass(&ComputePassDescriptor::default());
-            self.engine.set_all_global_data(parent_layer.num_boards, parent_layer.to_move, 0, fill_max_bind.1);
+            self.engine.set_all_global_data(parent_num_boards, to_move, 0, fill_max_bind.1);
             pass_encoder.set_pipeline(&self.engine.fill_max_shader.1);
             pass_encoder.set_bind_group(0, &fill_max_bind.0, &[]);
-            pass_encoder.dispatch_workgroups(ceil_div(parent_layer.num_boards, WORKGROUP_SIZE), 1, 1);
+            pass_encoder.dispatch_workgroups(ceil_div(parent_num_boards, WORKGROUP_SIZE), 1, 1);
             drop(pass_encoder);
             self.engine.queue.submit([command_encoder2.finish()]);
         }
         let mut command_encoder = self.engine.device.create_command_encoder(&CommandEncoderDescriptor::default());
-        if parent_layer.to_move == Side::White {
-            match NonZeroU64::try_from(parent_layer.board_buf.byte_len()) {
+        if to_move == Side::White {
+            match NonZeroU64::try_from(parent_eval.byte_len()) {
                 Ok(size) => {
-                    command_encoder.insert_debug_marker("set 0");
-                    command_encoder.clear_buffer(&parent_layer.board_buf.buffer(&self.gpu_allocator.boards), parent_layer.board_buf.start(), Some(size));
+                    command_encoder.clear_buffer(&parent_eval.buffer(&self.gpu_allocator.evals), parent_eval.start(), Some(size));
                 },
                 Err(_) => {},
             }
         }
         let mut pass_encoder = command_encoder.begin_compute_pass(&ComputePassDescriptor::default());
-        self.engine.set_all_global_data(child_layer.num_boards, parent_layer.to_move, 0, generic_contract_bind.1);
+        self.engine.set_all_global_data(child_layer.num_boards, to_move, 0, generic_contract_bind.1);
         if do_eval {
             pass_encoder.set_pipeline(&self.engine.eval_contract_shader.1);
         } else {
