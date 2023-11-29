@@ -61,7 +61,7 @@ fn start() -> impl EngineComs {
             drop(tree);
 
             let mut best_score = EvalScore::worst(state.to_move);
-            for m in first_moves.into_iter().take(1) {
+            for m in first_moves.into_iter() {
                 if coms.is_stopped() {
                     break;
                 }
