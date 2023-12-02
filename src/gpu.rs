@@ -27,6 +27,7 @@ pub struct GpuGlobalData {
     pub eval_contract_shader: Shader,
     pub contract_shader: Shader,
     pub fill_max_shader: Shader,
+    pub filter_shader: Shader,
 }
 
 impl GpuGlobalData {
@@ -86,6 +87,7 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuGlobalData {
     let eval_contract_shader = shaders::eval_contract(&device);
     let contract_shader = shaders::contract(&device);
     let fill_max_shader = shaders::fill_max(&device);
+    let filter_shader = shaders::filter(&device);
 
     let device_rc = Rc::new(device);
 
@@ -99,7 +101,8 @@ pub async fn init_gpu_evaluator(adapter: &Adapter) -> GpuGlobalData {
         expand_shader,
         eval_contract_shader,
         contract_shader,
-        fill_max_shader
+        fill_max_shader,
+        filter_shader
     };
 }
 

@@ -207,6 +207,74 @@ pub fn contract(device: &Device) -> Shader {
     return Shader(bind_group_layout, pipeline);
 }
 
+
+pub fn filter(device: &Device) -> Shader {
+    let bind_group_layout = device.create_bind_group_layout(
+        &BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None
+                    },
+                    count: None,
+                },
+            ],
+        }
+    );
+
+    let pipeline = device.create_compute_pipeline(
+        &wgpu::ComputePipelineDescriptor {
+            label: None,
+            layout: Some(&device.create_pipeline_layout(
+                &PipelineLayoutDescriptor {
+                    label: Some("Filter"),
+                    bind_group_layouts: &[&bind_group_layout],
+                    push_constant_ranges: &[]
+                }
+            )),
+            module: &device.create_shader_module(include_shader!("filter.wgsl")),
+            entry_point: "filter_pass"
+        }
+    );
+
+    return Shader(bind_group_layout, pipeline);
+}
+
 pub fn fill_max(device: &Device) -> Shader {
     let bind_group_layout = device.create_bind_group_layout(
         &BindGroupLayoutDescriptor {
@@ -416,6 +484,54 @@ impl FillMaxBindGroupMngr {
             buf_offset_0: 0,
             buf_offset_1: buffers.evals.start_elem(),
             buf_offset_2: 0,
+            buf_offset_3: 0,
+        };
+        return BindOut(expansion_bind, o);
+    }
+}
+
+
+
+pub struct FilterBindGroupMngr {
+    
+}
+
+pub struct FilterBuffers<'a> {
+    pub eval: u32, // Shut up, I'm allowed to make this hacky
+    pub input: &'a AllocToken<GpuBoard>,
+    pub output: &'a AllocToken<GpuBoard>,
+}
+
+impl FilterBindGroupMngr {
+    pub fn create(engine: &GpuGlobalData, alloc: &GpuAllocations, buffers: FilterBuffers) -> BindOut<2> {
+        let expansion_bind = engine.device.create_bind_group(
+            &BindGroupDescriptor {
+                label: None,
+                layout: &engine.filter_shader.0,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(engine.global_data.as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer(buffers.input.buffer(&alloc.boards).as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Buffer(buffers.output.buffer(&alloc.boards).as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::Buffer(engine.out_index.as_entire_buffer_binding())
+                    },
+                ]
+            }
+        );
+        let o = BuffOffsets {
+            buf_offset_0: buffers.eval,
+            buf_offset_1: buffers.input.start_elem(),
+            buf_offset_2: buffers.output.start_elem(),
             buf_offset_3: 0,
         };
         return BindOut(expansion_bind, o);
