@@ -58,20 +58,54 @@ fn start() -> impl EngineComs {
 
             tree.init_layer_from_state(&state);
             tree.expand_last_layer().await;
-            let first_moves = tree.view_boards_last().await.cast_t().to_vec();
+            
+            let first_moves: Vec<_> = tree.view_boards_last()
+                .await
+                .cast_t()
+                .iter()
+                .filter(|m| m.is_valid(state.to_move))
+                .map(|b| b.clone())
+                .collect();
             drop(tree);
+            
+            let mut trees: Vec<_> = first_moves.iter().map(|m| {
+                let mut tree = GpuTree::new(&engine, &allocations);
+                tree.init_layer(&[*m], state.to_move.opposite());
+                tree
+            }).collect();
+
+
+            let mut best_per_move: Vec<_> = first_moves.iter().map(|_| {
+                EvalScore::worst(state.to_move)
+            }).collect();
 
             let mut best_score = EvalScore::worst(state.to_move);
-            for m in first_moves.into_iter() {
-                if coms.is_stopped() {
-                    break;
-                }
-                if !m.is_valid(state.to_move) {
-                    continue;
+            for (i, tree) in trees.iter_mut().enumerate() {
+                loop {
+                    if allocations.fits(tree.last_layer().size() * MAX_MOVES) {
+                        tree.expand_last_layer().await;
+                        coms.report_depth_and_nodes(tree.last_layer().depth() as u16, tree.last_layer().size() as u64);
+                    } else {
+                        break;
+                    }
                 }
 
-                let mut tree = GpuTree::new(&engine, &allocations);
-                tree.init_layer(&[m], state.to_move.opposite());
+                tree.contract_all().await;
+
+                let result = tree.view_evals(0).await.cast_t()[0];
+                if EvalScore::better(&result, &best_score, state.to_move).is_ge() {
+                    let board = first_moves[i];
+                    coms.set_best(board::find_move(&state.get_board(), &board).unwrap(), result);
+                    best_score = result;
+                }
+                if EvalScore::better(&result, &best_per_move[i], state.to_move).is_gt() {
+                    best_per_move[i] = result;
+                }
+            }
+
+            for (i, tree) in trees.iter_mut().enumerate() {
+                tree.filter_last_layer(best_per_move[i]).await;
+                tree.shrink_last_layer(20);
 
                 loop {
                     if allocations.fits(tree.last_layer().size() * MAX_MOVES) {
@@ -81,12 +115,17 @@ fn start() -> impl EngineComs {
                         break;
                     }
                 }
+
                 tree.contract_all().await;
 
                 let result = tree.view_evals(0).await.cast_t()[0];
                 if EvalScore::better(&result, &best_score, state.to_move).is_ge() {
-                    coms.set_best(board::find_move(&state.get_board(), &m).unwrap(), result);
+                    let board = first_moves[i];
+                    coms.set_best(board::find_move(&state.get_board(), &board).unwrap(), result);
                     best_score = result;
+                }
+                if EvalScore::better(&result, &best_per_move[i], state.to_move).is_gt() {
+                    best_per_move[i] = result;
                 }
             }
             engine.device.stop_capture();

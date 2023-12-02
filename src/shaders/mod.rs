@@ -522,7 +522,7 @@ impl FilterBindGroupMngr {
                         resource: wgpu::BindingResource::Buffer(buffers.output.buffer(&alloc.boards).as_entire_buffer_binding())
                     },
                     BindGroupEntry {
-                        binding: 4,
+                        binding: 3,
                         resource: wgpu::BindingResource::Buffer(engine.out_index.as_entire_buffer_binding())
                     },
                 ]

@@ -42,6 +42,10 @@ impl<'dev> GpuTree<'dev> {
         self.filter(last, eval).await;
     }
 
+    pub fn shrink_last_layer(&mut self, size: u32) {
+        self.layers.last_mut().unwrap().num_boards = size;
+    }
+
     pub async fn expand_last_layer(&mut self) {
         let last = self.layers.last().unwrap();
         let mut new_layer = GpuTreeLayer {
