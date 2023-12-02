@@ -137,10 +137,6 @@ impl<'dev> GpuAllocations {
         let max_boards_dispatch = max_dispatch * WORKGROUP_SIZE;
         info!("Max dispatch is {max_dispatch}, which fits {max_boards_dispatch} boards");
         let mut boards_per_buf = u64::min(max_boards_per_buf, max_boards_dispatch) as u32;
-        if cfg!(test) {
-            info!("Detected test-mode, downsizing buffers");
-            boards_per_buf = 512;
-        }
         let buffer_size = boards_per_buf as u64 * size_of::<GpuBoard>() as u64;
         info!("We're allocating buffers of size {buffer_size}, which fits {boards_per_buf} boards");
 

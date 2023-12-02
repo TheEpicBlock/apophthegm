@@ -8,6 +8,7 @@
 #![feature(get_many_mut)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
+#![feature(test)]
 
 mod chess;
 mod gpu;

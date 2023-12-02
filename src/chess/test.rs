@@ -3,9 +3,12 @@ use std::fmt;
 use wgpu::Adapter;
 use pollster::FutureExt as _;
 
-use crate::{gpu::{GpuGlobalData, init_gpu_evaluator, init_adapter, GpuAllocations}, chess::{StandardBoard, GameState, Side, EvalScore}, gpu_tree::GpuTree};
+use crate::{gpu::{GpuGlobalData, init_gpu_evaluator, init_adapter, GpuAllocations}, chess::{StandardBoard, GameState, Side, EvalScore, MAX_MOVES}, gpu_tree::GpuTree};
 
 use super::{Board, board::convert, GpuBoard};
+
+extern crate test;
+use test::Bencher;
 
 // Only create an adapter once, to ensure no threading issues present themselves
 #[ctor::ctor]
@@ -309,4 +312,121 @@ async fn test_eval() {
     let evals: Vec<_> = tree.view_evals(0).await.cast_t().into_iter().map(|x| x.clone()).collect();
     assert_eq!(evals.len(), 1);
     assert_eq!(evals[0], *best);
+}
+
+#[bench]
+fn bench_init(b: &mut Bencher) {
+    pollster::block_on(async {
+        let board = GameState::from_fen("8/p7/8/8/8/8/4P2/8 w KQkq - 0 1");
+        let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
+        let mut allocator = GpuAllocations::init(engine.device.clone());
+        
+        b.iter(|| {
+            pollster::block_on(async {
+                let mut tree = GpuTree::new(&engine, &mut allocator);
+                tree.init_layer_from_state(&board);
+                test::black_box(tree.last_layer().size())
+            });
+        });
+    });
+}
+
+#[bench]
+fn bench_expand_single(b: &mut Bencher) {
+    pollster::block_on(async {
+        let board = GameState::from_fen("8/p7/8/8/8/8/4P2/8 w KQkq - 0 1");
+        let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
+        let mut allocator = GpuAllocations::init(engine.device.clone());
+        
+        b.iter(|| {
+            pollster::block_on(async {
+                let mut tree = GpuTree::new(&engine, &mut allocator);
+                tree.init_layer_from_state(&board);
+                tree.expand_last_layer().await;
+                test::black_box(tree.last_layer().size())
+            });
+        });
+    });
+}
+
+#[bench]
+fn bench_triple_expand(b: &mut Bencher) {
+    pollster::block_on(async {
+        let board = GameState::from_fen("8/p7/8/8/8/8/4P2/8 w KQkq - 0 1");
+        let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
+        let mut allocator = GpuAllocations::init(engine.device.clone());
+        assert!(allocator.fits(20 * MAX_MOVES * MAX_MOVES));
+        
+        b.iter(|| {
+            pollster::block_on(async {
+                let mut tree = GpuTree::new(&engine, &mut allocator);
+                tree.init_layer_from_state(&board);
+                tree.expand_last_layer().await;
+                tree.expand_last_layer().await;
+                tree.expand_last_layer().await;
+                test::black_box(tree.last_layer().size())
+            });
+        });
+    });
+}
+
+#[bench]
+fn bench_triple_expand_contract(b: &mut Bencher) {
+    pollster::block_on(async {
+        let board = GameState::from_fen("8/p7/8/8/8/8/4P2/8 w KQkq - 0 1");
+        let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
+        let mut allocator = GpuAllocations::init(engine.device.clone());
+        assert!(allocator.fits(20 * MAX_MOVES * MAX_MOVES));
+        
+        b.iter(|| {
+            pollster::block_on(async {
+                let mut tree = GpuTree::new(&engine, &mut allocator);
+                tree.init_layer_from_state(&board);
+                tree.expand_last_layer().await;
+                tree.expand_last_layer().await;
+                tree.expand_last_layer().await;
+                tree.contract_all().await;
+                test::black_box(tree.last_layer().size())
+            });
+        });
+    });
+}
+
+#[bench]
+fn bench_expand_read(b: &mut Bencher) {
+    pollster::block_on(async {
+        let board = GameState::from_fen("8/p7/8/8/8/8/4P2/8 w KQkq - 0 1");
+        let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
+        let mut allocator = GpuAllocations::init(engine.device.clone());
+        
+        b.iter(|| {
+            pollster::block_on(async {
+                let mut tree = GpuTree::new(&engine, &mut allocator);
+                tree.init_layer_from_state(&board);
+                tree.expand_last_layer().await;
+                let v = tree.view_boards_last().await;
+                test::black_box(v.cast_t()[0])
+            });
+        });
+    });
+}
+
+#[bench]
+fn bench_read(b: &mut Bencher) {
+    pollster::block_on(async {
+        let board = GameState::from_fen("8/p7/8/8/8/8/4P2/8 w KQkq - 0 1");
+        let engine = init_gpu_evaluator(&GPU_ADAPTER).await;
+        let mut allocator = GpuAllocations::init(engine.device.clone());
+        
+        let mut tree = GpuTree::new(&engine, &mut allocator);
+        tree.init_layer_from_state(&board);
+        tree.expand_last_layer().await;
+
+        b.iter(|| {
+            pollster::block_on(async {
+                let v = tree.view_boards_last().await;
+                test::black_box(v.cast_t()[0])
+            });
+        });
+    });
 }
