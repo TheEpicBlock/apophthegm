@@ -41,7 +41,7 @@ impl<T: BufferData> BufferManager<T> {
     const ELEMS_PER_BRICK: u32 = Self::BRICK_SIZE / T::SIZE as u32;
 
     pub fn create(device: Rc<Device>, max_elems_per_buf: u32, label: &'static str) -> Self {
-        let max_bricks_per_buf = (max_elems_per_buf * T::SIZE as u32) / Self::BRICK_SIZE;
+        let max_bricks_per_buf = max_elems_per_buf / Self::ELEMS_PER_BRICK;
         let buffer_size = max_bricks_per_buf as u64 * Self::BRICK_SIZE as u64;
         debug!("({label})");
         Self {
@@ -83,6 +83,7 @@ impl<T: BufferData> BufferManager<T> {
     /// the size is measured in number of elements
     pub fn allocate(&self, size: u32) -> AllocToken<T> {
         let bricks_needed = misc::ceil_div(size, Self::ELEMS_PER_BRICK as u64);
+        assert!(bricks_needed <= self.max_bricks_per_buf, "{bricks_needed} > {}", self.max_bricks_per_buf);
 
         let buffers = self.buffers.borrow();
         let buf_index = buffers.iter().enumerate().find(|(_, bufdata)| {
