@@ -1,5 +1,7 @@
 use std::{io, sync::{atomic::{AtomicBool, AtomicU16, AtomicU64}, Mutex, Arc}, rc::Rc};
 
+use pollster::FutureExt;
+
 use crate::chess::{GameState, Move, EvalScore, Side};
 
 pub fn start_loop(mut engine: impl EngineComs) -> ! {
@@ -72,7 +74,7 @@ pub fn start_loop(mut engine: impl EngineComs) -> ! {
                 });
                 current_search = Some(coms.clone());
 
-                engine.start_session(coms.clone(), gamestate.clone().unwrap());
+                engine.start_session(coms.clone(), gamestate.clone().unwrap()).block_on();
             }
             Some("stop") => {
                 let Some(ref coms) = current_search else { panic!("no active search") };
@@ -137,5 +139,5 @@ impl UciEvalSession {
 }
 
 pub trait EngineComs {
-    fn start_session(&mut self, coms: Arc<UciEvalSession>, state: GameState);
+    async fn start_session(&mut self, coms: Arc<UciEvalSession>, state: GameState);
 }

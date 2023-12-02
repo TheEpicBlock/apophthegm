@@ -104,8 +104,8 @@ struct Coms {
 }
 
 impl EngineComs for Coms {
-    fn start_session(&mut self, coms: Arc<UciEvalSession>, state: GameState) {
-        self.sender.try_send((coms, state)).unwrap();
+    async fn start_session(&mut self, coms: Arc<UciEvalSession>, state: GameState) {
+        self.sender.send((coms, state)).await.unwrap();
     }
 }
 
