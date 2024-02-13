@@ -101,33 +101,32 @@ fn start() -> impl EngineComs {
                 if EvalScore::better(&result, &best_per_move[i], state.to_move).is_gt() {
                     best_per_move[i] = result;
                 }
+                // tree.remove_above(1);
+                // tree.filter_last_layer(result).await;
+                // tree.shrink_last_layer(3);
             }
+            // for (i, tree) in trees.iter_mut().enumerate() {
+            //     loop {
+            //         if allocations.fits(tree.last_layer().size() * MAX_MOVES) {
+            //             tree.expand_last_layer().await;
+            //             coms.report_depth_and_nodes(tree.last_layer().depth() as u16, tree.last_layer().size() as u64);
+            //         } else {
+            //             break;
+            //         }
+            //     }
 
-            for (i, tree) in trees.iter_mut().enumerate() {
-                tree.filter_last_layer(best_per_move[i]).await;
-                tree.shrink_last_layer(20);
+            //     tree.contract_all().await;
 
-                loop {
-                    if allocations.fits(tree.last_layer().size() * MAX_MOVES) {
-                        tree.expand_last_layer().await;
-                        coms.report_depth_and_nodes(tree.last_layer().depth() as u16, tree.last_layer().size() as u64);
-                    } else {
-                        break;
-                    }
-                }
-
-                tree.contract_all().await;
-
-                let result = tree.view_evals(0).await.cast_t()[0];
-                if EvalScore::better(&result, &best_score, state.to_move).is_ge() {
-                    let board = first_moves[i];
-                    coms.set_best(board::find_move(&state.get_board(), &board).unwrap(), result);
-                    best_score = result;
-                }
-                if EvalScore::better(&result, &best_per_move[i], state.to_move).is_gt() {
-                    best_per_move[i] = result;
-                }
-            }
+            //     let result = tree.view_evals(0).await.cast_t()[0];
+            //     if EvalScore::better(&result, &best_score, state.to_move).is_ge() {
+            //         let board = first_moves[i];
+            //         coms.set_best(board::find_move(&state.get_board(), &board).unwrap(), result);
+            //         best_score = result;
+            //     }
+            //     if EvalScore::better(&result, &best_per_move[i], state.to_move).is_gt() {
+            //         best_per_move[i] = result;
+            //     }
+            // }
             engine.device.stop_capture();
             coms.stop();
         }

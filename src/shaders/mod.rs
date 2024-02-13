@@ -253,6 +253,16 @@ pub fn filter(device: &Device) -> Shader {
                     },
                     count: None,
                 },
+                BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None
+                    },
+                    count: None,
+                },
             ],
         }
     );
@@ -500,6 +510,7 @@ pub struct FilterBuffers<'a> {
     pub eval: u32, // Shut up, I'm allowed to make this hacky
     pub input: &'a AllocToken<GpuBoard>,
     pub output: &'a AllocToken<GpuBoard>,
+    pub evals: &'a AllocToken<EvalScore>,
 }
 
 impl FilterBindGroupMngr {
@@ -523,6 +534,10 @@ impl FilterBindGroupMngr {
                     },
                     BindGroupEntry {
                         binding: 3,
+                        resource: wgpu::BindingResource::Buffer(buffers.evals.buffer(&alloc.evals).as_entire_buffer_binding())
+                    },
+                    BindGroupEntry {
+                        binding: 4,
                         resource: wgpu::BindingResource::Buffer(engine.out_index.as_entire_buffer_binding())
                     },
                 ]
@@ -532,7 +547,7 @@ impl FilterBindGroupMngr {
             buf_offset_0: buffers.eval,
             buf_offset_1: buffers.input.start_elem(),
             buf_offset_2: buffers.output.start_elem(),
-            buf_offset_3: 0,
+            buf_offset_3: buffers.evals.start_elem(),
         };
         return BindOut(expansion_bind, o);
     }

@@ -46,6 +46,10 @@ impl<'dev> GpuTree<'dev> {
         self.layers.last_mut().unwrap().num_boards = size;
     }
 
+    pub fn remove_above(&mut self, layer: usize) {
+        self.layers.drain((layer+1)..).for_each(|l| l.dealloc(self.gpu_allocator));
+    }
+
     pub async fn expand_last_layer(&mut self) {
         let last = self.layers.last().unwrap();
         let mut new_layer = GpuTreeLayer {
@@ -98,7 +102,7 @@ impl<'dev> GpuTree<'dev> {
         self.engine.out_index_staging.unmap();
     }
 
-    async fn filter(&mut self, layer: usize, eval: EvalScore) {
+    pub async fn filter(&mut self, layer: usize, eval: EvalScore) {
         let layer = &mut self.layers[layer];
         let out_buf = self.gpu_allocator.boards.allocate(layer.num_boards);
 
@@ -106,6 +110,7 @@ impl<'dev> GpuTree<'dev> {
             input: &layer.board_buf,
             output: &out_buf,
             eval: eval.raw(),
+            evals: &layer.eval_buf.as_ref().unwrap()
         });
         
         self.engine.set_all_global_data(layer.num_boards, layer.to_move, 0, bind.1);
@@ -256,15 +261,19 @@ impl GpuTreeLayer {
             alloc.evals.allocate(self.num_boards)
         })
     }
+
+    fn dealloc(self, allocs: &GpuAllocations) {
+        allocs.boards.dealloc(self.board_buf);
+        if let Some(eval_buf) = self.eval_buf {
+            allocs.evals.dealloc(eval_buf);
+        }
+    }
 }
 
 impl Drop for GpuTree<'_> {
     fn drop(&mut self) {
         self.layers.drain(..).for_each(|layer| {
-            self.gpu_allocator.boards.dealloc(layer.board_buf);
-            if let Some(eval_buf) = layer.eval_buf {
-                self.gpu_allocator.evals.dealloc(eval_buf);
-            }
+            layer.dealloc(self.gpu_allocator);
         });
     }
 }
